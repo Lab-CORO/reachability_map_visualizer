@@ -1,64 +1,70 @@
-#ifndef HDF5_DATASET_H
-#define HDF5_DATASET_H
+#ifndef REACHABILITY_MAP_VISUALIZER__HDF5_DATASET_HPP_
+#define REACHABILITY_MAP_VISUALIZER__HDF5_DATASET_HPP_
+
 #include <hdf5/serial/H5Cpp.h>
 #include <hdf5/serial/hdf5.h>
+#include <rclcpp/rclcpp.hpp>
+
 #include <iostream>
-#include <ros/ros.h>
-
+#include <vector>
+#include <map>
+#include <string>
 #include <sys/stat.h>
-#include<unistd.h>
-
-typedef std::multimap< const std::vector< double >*, const std::vector< double >* > MultiMapPtr;
-typedef std::map< const std::vector< double >*, double > MapVecDoublePtr;
-typedef std::multimap< std::vector< double >, std::vector< double > > MultiMap;
-typedef std::map< std::vector< double >, double > MapVecDouble;
-typedef std::vector<std::vector<double> > VectorOfVectors;
-struct stat st;
+#include <unistd.h>
+#include <memory>
 
 
 
 namespace hdf5_dataset
 {
+
+using MultiMapPtr = std::multimap<const std::vector<double>*, const std::vector<double>*>;
+using MapVecDoublePtr = std::map<const std::vector<double>*, double>;
+using MultiMap = std::multimap<std::vector<double>, std::vector<double>>;
+using MapVecDouble = std::map<std::vector<double>, double>;
+using VectorOfVectors = std::vector<std::vector<double>>;
+struct stat st;
+
 class Hdf5Dataset
 {
 public:
-   Hdf5Dataset(std::string path, std::string filename); //Constructor for accessing .h5 file with path and filename
-   Hdf5Dataset(std::string fullpath);// Constructor for accessing .h5 file with only fullpath
+  Hdf5Dataset(std::string path, std::string filename);
+  Hdf5Dataset(std::string fullpath);
 
-  //~Hdf5Dataset();
-  bool open(); //Opening the file, groups and database
-  void close(); //Closing all the resources
+  bool open();
+  void close();
 
-  bool saveReachMapsToDataset( MultiMapPtr& poses,  MapVecDoublePtr& spheres, float resolution); //Saves Mutimap and Map to database and closes
+  bool saveReachMapsToDataset(MultiMapPtr& poses, MapVecDoublePtr& spheres, float resolution);
 
-  bool loadMapsFromDataset(MultiMapPtr& poses, MapVecDoublePtr& spheres); //Creates exact same Poses MultiMap that was stored with address variation
-  bool loadMapsFromDataset(MultiMapPtr& poses, MapVecDoublePtr& spheres, float &resolution); //with resolution
-  bool loadMapsFromDataset(MultiMap& poses, MapVecDouble& spheres); //Loads the pose and sphere
-  bool loadMapsFromDataset(MultiMap& Poses, MapVecDouble& Spheres, float &resolution); //with resolution
-  bool h5ToResolution(float &resolution);//Accesses the resolution of the map
+  bool loadMapsFromDataset(MultiMapPtr& poses, MapVecDoublePtr& spheres);
+  bool loadMapsFromDataset(MultiMapPtr& poses, MapVecDoublePtr& spheres, float &resolution);
+  bool loadMapsFromDataset(MultiMap& poses, MapVecDouble& spheres);
+  bool loadMapsFromDataset(MultiMap& poses, MapVecDouble& spheres, float &resolution);
+
+  bool h5ToResolution(float &resolution);
 
 private:
+  bool h5ToMultiMapPosesAndSpheres(MultiMapPtr& pose_col, MapVecDoublePtr& sphere_col);
+  bool h5ToMultiMapPoses(MultiMap& pose_col, MapVecDouble& sphere_col);
+  bool h5ToMultiMapPoses(MultiMap& pose_col);
+  bool h5ToMultiMapSpheres(MapVecDouble& sphere_col);
 
-  bool h5ToMultiMapPosesAndSpheres(MultiMapPtr& pose_col, MapVecDoublePtr& sphere_col); //loads the whole data with same address structure as stored in .h5
-
-  bool h5ToMultiMapPoses(MultiMap& pose_col, MapVecDouble& sphere_col); //accesses the poses and spheres data in the poses dataset
-  bool h5ToMultiMapPoses(MultiMap& pose_col); //Accessess only the data from poses dataset regardless of address
-  bool h5ToMultiMapSpheres(MapVecDouble& sphere_col); //Accessess only the data from spheres dataset regardless of address
-
-  bool checkPath(std::string path); //Checking if path exists
-  bool checkFileName(std::string filename); //Checking if filename is a .h5 or not
-  void createPath(std::string path); //Creating the path
-
-
+  bool checkPath(std::string path);
+  bool checkFileName(std::string filename);
+  void createPath(std::string path);
 
   std::string path_;
   std::string filename_;
-  hid_t file_, group_poses_, group_spheres_;
-  hid_t poses_dataset_, sphere_dataset_;
-  hid_t attr_;
-  float res_;
- 
+
+  hid_t file_ = -1;
+  hid_t group_poses_ = -1;
+  hid_t group_spheres_ = -1;
+  hid_t poses_dataset_ = -1;
+  hid_t sphere_dataset_ = -1;
+  hid_t attr_ = -1;
+  float res_ = 0.0;
 };
 
-}  // namespace hdf5_dataset
-#endif  // HDF5_DATASET_H
+}  // namespace reachability_map_visualizer
+
+#endif  // REACHABILITY_MAP_VISUALIZER__HDF5_DATASET_HPP_

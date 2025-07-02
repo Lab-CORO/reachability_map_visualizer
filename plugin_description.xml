@@ -1,7 +1,7 @@
-<library path="lib/libreachability_map_visualizer">
+<library path="reachability_map_plugin">
    <class name="reachability_map_visualizer/ReachabilityMap"
          type="reachability_map_visualizer::ReachMapDisplay"
-         base_class_type="rviz::Display">
+         base_class_type="rviz_common::Display">
     <description>
       Displays poses and spheres of reachability map
     </description>

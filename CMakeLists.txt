@@ -1,249 +1,384 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.10)
 project(reachability_map_visualizer)
 
-## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+# ------------------------------------------------------------------------------
+# Settings
+# ------------------------------------------------------------------------------
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_AUTOMOC ON)
 
-## Find catkin macros and libraries
-## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
-## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS
-    rviz
-    std_msgs
-    geometry_msgs
-)
+# ------------------------------------------------------------------------------
+# Dependencies
+# ------------------------------------------------------------------------------
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
 
-## System dependencies are found with CMake's conventions
-# find_package(Boost REQUIRED COMPONENTS system)
+find_package(Qt5 REQUIRED COMPONENTS Widgets)
 find_package(HDF5 REQUIRED)
 find_package(MPI REQUIRED)
 
-## Qt setup:
-set(CMAKE_AUTOMOC ON)
+find_package(rviz_common REQUIRED)
+find_package(rviz_rendering REQUIRED)
+find_package(rviz_ogre_vendor REQUIRED)
 
-if(rviz_QT_VERSION VERSION_LESS "5")
-  message(STATUS "Using Qt4 based on the rviz_QT_VERSION: ${rviz_QT_VERSION}")
-  find_package(Qt4 ${rviz_QT_VERSION} EXACT REQUIRED QtCore QtGui)
-  ## pull in all required include dirs, define QT_LIBRARIES, etc.
-  include(${QT_USE_FILE})
-else()
-  message(STATUS "Using Qt5 based on the rviz_QT_VERSION: ${rviz_QT_VERSION}")
-  find_package(Qt5 ${rviz_QT_VERSION} EXACT REQUIRED Core Widgets)
-  ## make target_link_libraries(${QT_LIBRARIES}) pull in all required dependencies
-  set(QT_LIBRARIES Qt5::Widgets)
-endif()
-
-add_definitions(-DQT_NO_KEYWORDS)
-
-## Uncomment this if the package has a setup.py. This macro ensures
-## modules and global scripts declared therein get installed
-## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
-# catkin_python_setup()
-
-################################################
-## Declare ROS messages, services and actions ##
-################################################
-
-## To declare and build messages, services or actions from within this
-## package, follow these steps:
-## * Let MSG_DEP_SET be the set of packages whose message types you use in
-##   your messages/services/actions (e.g. std_msgs, actionlib_msgs, ...).
-## * In the file package.xml:
-##   * add a build_depend tag for "message_generation"
-##   * add a build_depend and a exec_depend tag for each package in MSG_DEP_SET
-##   * If MSG_DEP_SET isn't empty the following dependency has been pulled in
-##     but can be declared for certainty nonetheless:
-##     * add a exec_depend tag for "message_runtime"
-## * In this file (CMakeLists.txt):
-##   * add "message_generation" and every package in MSG_DEP_SET to
-##     find_package(catkin REQUIRED COMPONENTS ...)
-##   * add "message_runtime" and every package in MSG_DEP_SET to
-##     catkin_package(CATKIN_DEPENDS ...)
-##   * uncomment the add_*_files sections below as needed
-##     and list every .msg/.srv/.action file to be processed
-##   * uncomment the generate_messages entry below
-##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
-
-## Generate messages in the 'msg' folder
-add_message_files(
- FILES
- WsSphere.msg
- WorkSpace.msg
+# ------------------------------------------------------------------------------
+# Message generation
+# ------------------------------------------------------------------------------
+rosidl_generate_interfaces(${PROJECT_NAME}
+        "msg/WsSphere.msg"
+        "msg/WorkSpace.msg"
+        DEPENDENCIES std_msgs geometry_msgs
 )
+rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
-## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
-#   Service1.srv
-#   Service2.srv
-# )
-
-## Generate actions in the 'action' folder
-# add_action_files(
-#   FILES
-#   Action1.action
-#   Action2.action
-# )
-
-## Generate added messages and services with any dependencies listed here
-generate_messages(
-  DEPENDENCIES
-  geometry_msgs
-  std_msgs  # Or other packages containing msgs
-)
-
-################################################
-## Declare ROS dynamic reconfigure parameters ##
-################################################
-
-## To declare and build dynamic reconfigure parameters within this
-## package, follow these steps:
-## * In the file package.xml:
-##   * add a build_depend and a exec_depend tag for "dynamic_reconfigure"
-## * In this file (CMakeLists.txt):
-##   * add "dynamic_reconfigure" to
-##     find_package(catkin REQUIRED COMPONENTS ...)
-##   * uncomment the "generate_dynamic_reconfigure_options" section below
-##     and list every .cfg file to be processed
-
-## Generate dynamic reconfigure parameters in the 'cfg' folder
-# generate_dynamic_reconfigure_options(
-#   cfg/DynReconf1.cfg
-#   cfg/DynReconf2.cfg
-# )
-
-###################################
-## catkin specific configuration ##
-###################################
-## The catkin_package macro generates cmake config files for your package
-## Declare things to be passed to dependent projects
-## INCLUDE_DIRS: uncomment this if your package contains header files
-## LIBRARIES: libraries you create in this project that dependent projects also need
-## CATKIN_DEPENDS: catkin_packages dependent projects also need
-## DEPENDS: system dependencies of this project that dependent projects also need
-catkin_package(
- INCLUDE_DIRS
-    include
- LIBRARIES
-    hdf5_dataset
-    roscpp
- CATKIN_DEPENDS message_runtime
-#  DEPENDS system_lib
-)
-
-###########
-## Build ##
-###########
-
-## Specify additional locations of header files
-## Your package locations should be listed before other locations
+# ------------------------------------------------------------------------------
+# Include directories
+# ------------------------------------------------------------------------------
 include_directories(
-  include
-  ${catkin_INCLUDE_DIRS}
-  ${HDF5_INCLUDE_DIRS}
-  ${MPI_CXX_INCLUDE_DIRS}
+        include
+        ${HDF5_INCLUDE_DIRS}
+        ${MPI_CXX_INCLUDE_DIRS}
 )
 
-## Declare a C++ library
-add_library(${PROJECT_NAME}
-  src/reachability_map_visual.cpp
-  src/reachability_map_display.cpp
+# ------------------------------------------------------------------------------
+# Libraries
+# ------------------------------------------------------------------------------
+
+# Dataset library
+add_library(hdf5_dataset SHARED
+        src/hdf5_dataset.cpp
 )
-add_library(hdf5_dataset
-  src/hdf5_dataset.cpp
+ament_target_dependencies(hdf5_dataset
+        rclcpp
+        std_msgs
+        geometry_msgs
 )
-
-## Add cmake target dependencies of the library
-## as an example, code may need to be generated before libraries
-## either from message generation or dynamic reconfigure
-# add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-## Declare a C++ executable
-## With catkin_make all packages are built within a single CMake context
-## The recommended prefix ensures that target names across packages don't collide
-add_executable(load_reachability_map src/load_reachability_map.cpp)
-add_dependencies(load_reachability_map ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-## Rename C++ executable without prefix
-## The above recommended prefix causes long target names, the following renames the
-## target back to the shorter version for ease of user use
-## e.g. "rosrun someones_pkg node" instead of "rosrun someones_pkg someones_pkg_node"
-# set_target_properties(${PROJECT_NAME}_node PROPERTIES OUTPUT_NAME node PREFIX "")
-
-## Add cmake target dependencies of the executable
-## same as for the library above
-# add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-## Specify libraries to link a library or executable target against
-target_link_libraries(${PROJECT_NAME} 
-  ${QT_LIBRARIES} 
-  ${catkin_LIBRARIES}
-)
-
 target_link_libraries(hdf5_dataset
-  ${catkin_LIBRARIES} 
-  ${HDF5_LIBRARIES} 
-  ${MPI_CXX_LIBRARIES}
+        ${HDF5_LIBRARIES}
+        ${MPI_CXX_LIBRARIES}
 )
 
-target_link_libraries(load_reachability_map  hdf5_dataset ${catkin_LIBRARIES})
-
-#############
-## Install ##
-#############
-
-# all install targets should use catkin DESTINATION variables
-# See http://ros.org/doc/api/catkin/html/adv_user_guide/variables.html
-
-## Mark executable scripts (Python etc.) for installation
-## in contrast to setup.py, you can choose the destination
-# catkin_install_python(PROGRAMS
-#   scripts/my_python_script
-#   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
-
-## Mark executables for installation
-## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
-# install(TARGETS ${PROJECT_NAME}_node
-#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
-
-## Mark libraries for installation
-## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_libraries.html
-install(TARGETS ${PROJECT_NAME} hdf5_dataset
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+# RViz2 Plugin
+add_library(reachability_map_plugin SHARED
+        src/reachability_map_visual.cpp
+        src/reachability_map_display.cpp
+)
+ament_target_dependencies(reachability_map_plugin
+        rclcpp
+        std_msgs
+        geometry_msgs
+        rviz_common
+        rviz_rendering
+)
+target_link_libraries(reachability_map_plugin
+        Qt5::Widgets
+        ${HDF5_LIBRARIES}
+        ${MPI_CXX_LIBRARIES}
+        rviz_ogre_vendor::OgreMain
+        "${cpp_typesupport_target}"
 )
 
-## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-#   FILES_MATCHING PATTERN "*.h"
-#   PATTERN ".svn" EXCLUDE
-# )
-install(DIRECTORY include/${PROJECT_NAME}/
- DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+# ------------------------------------------------------------------------------
+# Executable
+# ------------------------------------------------------------------------------
+
+add_executable(load_reachability_map src/load_reachability_map.cpp)
+ament_target_dependencies(load_reachability_map
+        rclcpp
+        std_msgs
+        geometry_msgs
+)
+target_link_libraries(load_reachability_map
+        hdf5_dataset
+        "${cpp_typesupport_target}"
 )
 
+# ------------------------------------------------------------------------------
+# Install targets
+# ------------------------------------------------------------------------------
 
-## Mark other files for installation (e.g. launch and bag files, etc.)
-install(FILES
-  plugin_description.xml
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
+# Install libraries and executable
+install(
+        TARGETS
+        hdf5_dataset
+        reachability_map_plugin
+        load_reachability_map
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
+)
 
-install(DIRECTORY icons/
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/icons)
+# Install headers
+install(
+        DIRECTORY include/
+        DESTINATION include/
+)
 
-#############
-## Testing ##
-#############
+# Install RViz plugin description file
+install(
+        FILES plugin_description.xml
+        DESTINATION share/${PROJECT_NAME}
+)
 
-## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_reachability_map_visualizer.cpp)
-# if(TARGET ${PROJECT_NAME}-test)
-#   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
-# endif()
+# ------------------------------------------------------------------------------
+# Export
+# ------------------------------------------------------------------------------
+pluginlib_export_plugin_description_file(rviz_common plugin_description.xml)
 
-## Add folders to be run by python nosetests
-# catkin_add_nosetests(test)
+ament_export_include_directories(include)
+ament_export_libraries(reachability_map_plugin)
+ament_export_dependencies(
+        rclcpp
+        std_msgs
+        geometry_msgs
+        rviz_common
+        rviz_rendering
+        HDF5
+        MPI
+)
+
+ament_package()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#cmake_minimum_required(VERSION 3.10)
+#project(reachability_map_visualizer)
+#
+## Required to use Qt and ament
+#set(CMAKE_CXX_STANDARD 17)
+#set(CMAKE_AUTOMOC ON)
+#
+## set(CMAKE_AUTOMOC ON)
+## qt5_wrap_cpp(MOC_FILES
+##   include/reachability_map_visualizer/hdf5_dataset.h
+## )
+## ------------------------------------------------------------------------------
+## Dependencies
+## ------------------------------------------------------------------------------
+#
+#find_package(ament_cmake REQUIRED)
+#find_package(rclcpp REQUIRED)
+#find_package(std_msgs REQUIRED)
+#find_package(geometry_msgs REQUIRED)
+#find_package(rosidl_default_generators REQUIRED)
+#
+#find_package(rviz_common REQUIRED)
+#find_package(rviz_rendering REQUIRED)
+#find_package(Qt5 REQUIRED COMPONENTS Widgets)
+#find_package(HDF5 REQUIRED)
+#find_package(MPI REQUIRED)
+##find_package(reachability_map_visualizer REQUIRED)
+#find_package(rviz2 REQUIRED)
+#find_package(rviz_ogre_vendor REQUIRED)
+## find_package(rviz_common REQUIRED)
+## find_package(rviz_rendering REQUIRED)
+## ------------------------------------------------------------------------------
+## Message generation
+## ------------------------------------------------------------------------------
+##add_compile_options(-fpermissive)
+#
+#rosidl_generate_interfaces(${PROJECT_NAME}
+#  "msg/WsSphere.msg"
+#  "msg/WorkSpace.msg"
+#  DEPENDENCIES std_msgs geometry_msgs
+#)
+#
+#rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
+#
+#
+## ------------------------------------------------------------------------------
+## Include directories
+## ------------------------------------------------------------------------------
+#
+#include_directories(
+#  include
+#  ${HDF5_INCLUDE_DIRS}
+#  ${MPI_CXX_INCLUDE_DIRS}
+#)
+##set(dependencies
+##        message_filters
+##        Qt5
+##        rviz_common
+##        rviz_ogre_vendor
+##        rviz_rendering
+##        sensor_msgs
+##        tf2
+##        tf2_ros
+##)
+## ------------------------------------------------------------------------------
+## Libraries
+## ------------------------------------------------------------------------------
+#
+#add_library(hdf5_dataset SHARED
+#  src/hdf5_dataset.cpp
+#)
+#ament_target_dependencies(hdf5_dataset
+#  rclcpp
+#  std_msgs
+#  geometry_msgs
+##  reachability_map_visualizer
+#)
+#target_link_libraries(hdf5_dataset
+#  ${HDF5_LIBRARIES}
+#  ${MPI_CXX_LIBRARIES}
+#)
+#
+##add_library(reachability_map_plugin SHARED
+##  src/reachability_map_visual.cpp
+##  src/reachability_map_display.cpp
+##)
+##target_link_libraries(reachability_map_plugin
+##  Qt5::Widgets
+##  ${HDF5_LIBRARIES}
+##  ${MPI_CXX_LIBRARIES}
+##  rviz_ogre_vendor::OgreMain
+##  "${cpp_typesupport_target}"
+##
+##)
+##ament_target_dependencies(reachability_map_plugin
+##  rclcpp
+##  std_msgs
+##  geometry_msgs
+##  rviz_common
+##  rviz_rendering
+##)
+##target_link_libraries(reachability_map_plugin "${cpp_typesupport_target}")
+#
+## ------------------------------------------------------------------------------
+## Executable
+## ------------------------------------------------------------------------------
+#
+#add_executable(load_reachability_map src/load_reachability_map.cpp)
+#ament_target_dependencies(load_reachability_map
+#  rclcpp
+#  std_msgs
+#  geometry_msgs
+##  reachability_map_visualizer
+#)
+#target_link_libraries(load_reachability_map
+#  hdf5_dataset
+#  "${cpp_typesupport_target}"
+#)
+##target_link_libraries(load_reachability_map "${cpp_typesupport_target}")
+## ------------------------------------------------------------------------------
+## Install targets
+## ------------------------------------------------------------------------------
+#
+#install(
+#  TARGETS
+#    hdf5_dataset
+#    load_reachability_map
+#    DESTINATION lib/${PROJECT_NAME}
+#)
+#
+#install(DIRECTORY include/
+#  DESTINATION include/
+#)
+#
+#
+##pluginlib_export_plugin_description_file(rviz_common plugin_description.xml)
+#
+#
+#
+#
+##ament_export_include_directories(include)
+## ament_export_libraries(hdf5_dataset reachability_map_plugin)
+##ament_export_libraries(reachability_map_plugin)
+#
+##ament_export_dependencies(
+##  rclcpp
+##  std_msgs
+##  geometry_msgs
+##  rviz_common
+##  rviz_rendering
+##  HDF5
+##  MPI
+##)
+##install(TARGETS reachability_map_plugin
+##        ARCHIVE DESTINATION lib
+##        LIBRARY DESTINATION lib
+##        RUNTIME DESTINATION lib/${PROJECT_NAME}
+##)
+##
+##install(FILES
+##        plugin_description.xml
+##        DESTINATION share/${PROJECT_NAME}
+##)
+##ament_export_targets(exportreachability_map_plugin)
+## 1) build your plugin
+#add_library(reachability_map_plugin SHARED
+#        src/reachability_map_visual.cpp
+#        src/reachability_map_display.cpp
+#)
+#ament_target_dependencies(reachability_map_plugin
+#        rclcpp std_msgs geometry_msgs
+#        rviz_common rviz_rendering
+#)
+#target_link_libraries(reachability_map_plugin
+#        Qt5::Widgets
+#        rviz_ogre_vendor::OgreMain
+#        ${HDF5_LIBRARIES} ${MPI_CXX_LIBRARIES}
+#)
+#
+## 2) install the library
+#install(
+#        TARGETS reachability_map_plugin
+#        ARCHIVE DESTINATION lib
+#        LIBRARY DESTINATION lib
+#        RUNTIME   DESTINATION lib/${PROJECT_NAME}  # if you also build executables
+#)
+#
+## 3) install your plugin XML
+#install(
+#        FILES plugin_description.xml
+#        DESTINATION share/${PROJECT_NAME}
+#)
+#
+## 4) let ament/rviz know about it
+#pluginlib_export_plugin_description_file(rviz_common plugin_description.xml)
+#
+#
+#ament_package()

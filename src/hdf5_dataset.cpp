@@ -1,4 +1,6 @@
+// ROS 2 port of the original Hdf5Dataset class
 #include <reachability_map_visualizer/hdf5_dataset.h>
+#include <rclcpp/rclcpp.hpp>
 
 #define RANK_OUT 2
 
@@ -14,7 +16,7 @@ Hdf5Dataset::Hdf5Dataset(std::string fullpath)
 
   while(std::getline(fp, segment, '/'))
   {
-     seglist.push_back(segment);
+    seglist.push_back(segment);
   }
 
   std::ostringstream oss_file;
@@ -38,9 +40,10 @@ Hdf5Dataset::Hdf5Dataset(std::string fullpath)
     oss_path << the_path;
   }
 
- this->path_ = oss_path.str();
- checkPath(this->path_);
- checkFileName(this->filename_);
+  this->path_ = oss_path.str();
+  checkPath(this->path_);
+  checkFileName(this->filename_);
+  RCLCPP_INFO(rclcpp::get_logger("Hdf5Dataset"), "Extracted filename: %s", this->filename_.c_str());
 }
 
 Hdf5Dataset::Hdf5Dataset(std::string path, std::string filename)
@@ -54,7 +57,7 @@ Hdf5Dataset::Hdf5Dataset(std::string path, std::string filename)
 bool Hdf5Dataset::open()
 {
   std::string fullpath = this->path_ + this->filename_;
-  ROS_INFO("Opening map %s", fullpath.c_str());
+  RCLCPP_INFO(rclcpp::get_logger("Hdf5Dataset"), "Opening map %s", fullpath.c_str());
   this->file_ = H5Fopen(fullpath.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
 
   this->group_poses_ = H5Gopen(this->file_, "/Poses", H5P_DEFAULT);
@@ -65,7 +68,6 @@ bool Hdf5Dataset::open()
 
   this->attr_ = H5Aopen(this->sphere_dataset_, "Resolution", H5P_DEFAULT);
   herr_t ret = H5Aread(this->attr_, H5T_NATIVE_FLOAT, &this->res_);
-
 }
 
 void Hdf5Dataset::close()
@@ -78,45 +80,44 @@ void Hdf5Dataset::close()
   H5Fclose(this->file_);
 }
 
-
 bool Hdf5Dataset::checkPath(std::string path)
 {
-  if (stat(path.c_str(), &st)!=0)
+  if (stat(path.c_str(), &st) != 0)
   {
-    ROS_INFO("Path does not exist yet");
-    //return false;
+    RCLCPP_INFO(rclcpp::get_logger("Hdf5Dataset"), "Path does not exist yet");
   }
+  return true;
 }
 
 void Hdf5Dataset::createPath(std::string path)
 {
-  ROS_INFO("Creating Directory");
+  RCLCPP_INFO(rclcpp::get_logger("Hdf5Dataset"), "Creating Directory");
   const int dir_err = mkdir(this->path_.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
   if(1 == dir_err)
   {
-    ROS_INFO("Error Creating Directory");
+    RCLCPP_INFO(rclcpp::get_logger("Hdf5Dataset"),"Error Creating Directory");
     exit(1);
   }
 }
 
 bool Hdf5Dataset::checkFileName(std::string filename)
 {
-  std::string ext = ".h5";
-  if(filename.find(ext) == std::string::npos)
+  if (filename.find(".h5") == std::string::npos)
   {
-    ROS_ERROR("Please provide an extension of .h5 It will make life easy");
+    RCLCPP_ERROR(rclcpp::get_logger("Hdf5Dataset"), "Filename must have .h5 extension");
     exit(1);
   }
+  return true;
 }
 
-bool Hdf5Dataset::saveReachMapsToDataset( MultiMapPtr& poses,  MapVecDoublePtr& spheres, float resolution)
+bool Hdf5Dataset::saveReachMapsToDataset(MultiMapPtr& poses, MapVecDoublePtr& spheres, float resolution)
 {
-  if(!checkPath(this->path_))
-  {
+  if (!checkPath(this->path_))
     createPath(this->path_);
-  }
 
-  //Creating Multimap to Straight vector<vector<double> > //Can take this function to a new class
+  RCLCPP_INFO(rclcpp::get_logger("Hdf5Dataset"), "Saving reachability map to %s", (this->path_ + this->filename_).c_str());
+
+   //Creating Multimap to Straight vector<vector<double> > //Can take this function to a new class
   std::vector< std::vector< double > > pose_reach;
   for (MultiMapPtr::iterator it = poses.begin(); it != poses.end(); ++it)
   {
@@ -136,12 +137,12 @@ bool Hdf5Dataset::saveReachMapsToDataset( MultiMapPtr& poses,  MapVecDoublePtr& 
    }
 
   std::string fullpath = this->path_ + this->filename_;
-  ROS_INFO("Saving map %s", fullpath.c_str());
+  RCLCPP_INFO(rclcpp::get_logger("Hdf5Dataset"),"Saving map %s", fullpath.c_str());
 
   this->file_ = H5Fcreate(fullpath.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
   this->group_poses_ = H5Gcreate(this->file_, "/Poses", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
   this->group_spheres_ = H5Gcreate(this->file_, "/Spheres", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-  ROS_INFO("Saving poses in reachability map");
+  RCLCPP_INFO(rclcpp::get_logger("Hdf5Dataset"),"Saving poses in reachability map");
   const hsize_t ndims = 2;
   const hsize_t ncols = 10;
 
@@ -247,7 +248,7 @@ bool Hdf5Dataset::saveReachMapsToDataset( MultiMapPtr& poses,  MapVecDoublePtr& 
 
 
   // Creating Sphere dataset
-  ROS_INFO("Saving spheres in Reachability map");
+  RCLCPP_INFO(rclcpp::get_logger("Hdf5Dataset"),"Saving spheres in Reachability map");
   hid_t sphere_dataspace;
   const int SX = spheres.size();
   const int SY = 4;
@@ -294,7 +295,6 @@ bool Hdf5Dataset::saveReachMapsToDataset( MultiMapPtr& poses,  MapVecDoublePtr& 
   close();
 }
 
-
 bool Hdf5Dataset::h5ToMultiMapPosesAndSpheres(MultiMapPtr& pose_col, MapVecDoublePtr& sphere_col)
 {
   //The process of creting typedef MultiMap is little bit tricky.
@@ -311,7 +311,7 @@ bool Hdf5Dataset::h5ToMultiMapPosesAndSpheres(MultiMapPtr& pose_col, MapVecDoubl
   MapVecDouble sp_col;
   h5ToMultiMapSpheres(sp_col);
 
- for(MapVecDouble::iterator it=sps.begin(); it!=sps.end();++it)
+  for(MapVecDouble::iterator it=sps.begin(); it!=sps.end();++it)
   {
     //const std::vector<double>* sp = &(it->first);
     std::vector<double>* sp = new std::vector<double>(3);
@@ -329,21 +329,21 @@ bool Hdf5Dataset::h5ToMultiMapPosesAndSpheres(MultiMapPtr& pose_col, MapVecDoubl
       (*ps)[4]=(it1->second[4]);
       (*ps)[5]=(it1->second[5]);
       (*ps)[6]=(it1->second[6]);
-       pose_col.insert(std::make_pair(sp, ps));
-      }
+      pose_col.insert(std::make_pair(sp, ps));
+    }
 
     for (MapVecDouble::iterator it2 = sp_col.lower_bound(it->first); it2 !=sp_col.upper_bound(it->first); ++it2)
     {
       sphere_col.insert(std::make_pair(sp, it2->second));
-     }
-   }
-return 0;
+    }
+  }
+  return 0;
 }
 
 bool Hdf5Dataset::h5ToMultiMapPoses(MultiMap& pose_col)
 {
   MapVecDouble sphere_col;
-  h5ToMultiMapPoses(pose_col, sphere_col);
+  return h5ToMultiMapPoses(pose_col, sphere_col);
 }
 
 bool Hdf5Dataset::h5ToMultiMapPoses(MultiMap& pose_col, MapVecDouble& sphere_col)
@@ -397,16 +397,16 @@ bool Hdf5Dataset::h5ToMultiMapPoses(MultiMap& pose_col, MapVecDouble& sphere_col
       for(int j=0; j<3;j++)
       {
         sphere_center[j] = data_out[i][j];
-        }
+      }
       for(int k=3;k<10; k++)
       {
         Poses[k-3] = data_out[i][k];
-        }
+      }
       pose_col.insert(std::make_pair(sphere_center, Poses));
       sphere_col.insert(std::make_pair(sphere_center, double(i)));
-      }
+    }
   }
-return 0;
+  return 0;
 }
 
 bool Hdf5Dataset::h5ToMultiMapSpheres(MapVecDouble& sphere_col)
@@ -440,39 +440,37 @@ bool Hdf5Dataset::h5ToMultiMapSpheres(MapVecDouble& sphere_col)
       ri = data_out[i][k];
     }
     sphere_col.insert(std::pair< std::vector< double >, double >(sphere_center, ri));
-   }
+  }
   return 0;
 }
 
 bool Hdf5Dataset::h5ToResolution(float &resolution)
 {
   resolution = this->res_;
-  return 0;
+  return true;
 }
-
 
 bool Hdf5Dataset::loadMapsFromDataset(MultiMapPtr& poses, MapVecDoublePtr& spheres, float &resolution)
 {
   h5ToMultiMapPosesAndSpheres(poses, spheres);
   h5ToResolution(resolution);
   close();
-  return 0;
+  return true;
 }
 
 bool Hdf5Dataset::loadMapsFromDataset(MultiMapPtr& poses, MapVecDoublePtr& spheres)
 {
   h5ToMultiMapPosesAndSpheres(poses, spheres);
   close();
-  return 0;
+  return true;
 }
-
 
 bool Hdf5Dataset::loadMapsFromDataset(MultiMap& poses, MapVecDouble& spheres)
 {
   h5ToMultiMapPoses(poses);
   h5ToMultiMapSpheres(spheres);
   close();
-  return 0;
+  return true;
 }
 
 bool Hdf5Dataset::loadMapsFromDataset(MultiMap& poses, MapVecDouble& spheres, float &resolution)
@@ -481,8 +479,7 @@ bool Hdf5Dataset::loadMapsFromDataset(MultiMap& poses, MapVecDouble& spheres, fl
   h5ToMultiMapSpheres(spheres);
   h5ToResolution(resolution);
   close();
-  return 0;
+  return true;
 }
 
-
-};
+}  // namespace hdf5_dataset

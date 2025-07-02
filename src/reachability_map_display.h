@@ -3,17 +3,17 @@
 
 #ifndef Q_MOC_RUN
 
-#include <rviz/message_filter_display.h>
-
-#include <reachability_map_visualizer/WorkSpace.h>
+#include <rviz_common/message_filter_display.hpp>
+#include "reachability_map_visualizer/msg/work_space.hpp"
 #endif
+#include "../../../../../../../opt/ros/humble/include/rviz_common/rviz_common/properties/ros_topic_property.hpp"
 
-namespace Ogre
-{
-class SceneNode;
-}
+// namespace Ogre
+// {
+// class SceneNode;
+// }
 
-namespace rviz
+namespace rviz_common::properties
 {
 class EnumProperty;
 class BoolProperty;
@@ -25,7 +25,7 @@ class IntProperty;
 namespace reachability_map_visualizer
 {
 class ReachMapVisual;
-class ReachMapDisplay : public rviz::MessageFilterDisplay< reachability_map_visualizer::WorkSpace >
+class ReachMapDisplay : public rviz_common::MessageFilterDisplay< reachability_map_visualizer::msg::WorkSpace >
 {
   Q_OBJECT
 public:
@@ -61,27 +61,27 @@ private Q_SLOTS:
   void updateSphereSize();
 
 private:
-  void processMessage(const reachability_map_visualizer::WorkSpace::ConstPtr& msg);
-  std::vector< boost::shared_ptr< ReachMapVisual > > visuals_;
+  void processMessage(reachability_map_visualizer::msg::WorkSpace::ConstSharedPtr msg)override;
+  // std::vector< boost::shared_ptr< ReachMapVisual > > visuals_;
+  std::vector<std::shared_ptr<ReachMapVisual>> visuals_;
+  rviz_common::properties::Property* arrow_category_;
+  rviz_common::properties::Property* sphere_category_;
 
-  rviz::Property* arrow_category_;
-  rviz::Property* sphere_category_;
+  rviz_common::properties::BoolProperty* do_display_arrow_;
+  rviz_common::properties::ColorProperty* arrow_color_property_;
+  rviz_common::properties::FloatProperty* arrow_alpha_property_;
+  rviz_common::properties::FloatProperty* arrow_length_property_;
 
-  rviz::BoolProperty* do_display_arrow_;
-  rviz::ColorProperty* arrow_color_property_;
-  rviz::FloatProperty* arrow_alpha_property_;
-  rviz::FloatProperty* arrow_length_property_;
+  rviz_common::properties::BoolProperty* do_display_sphere_;
+  rviz_common::properties::ColorProperty* sphere_color_property_;
+  rviz_common::properties::FloatProperty* sphere_alpha_property_;
+  rviz_common::properties::FloatProperty* sphere_radius_property_;
 
-  rviz::BoolProperty* do_display_sphere_;
-  rviz::ColorProperty* sphere_color_property_;
-  rviz::FloatProperty* sphere_alpha_property_;
-  rviz::FloatProperty* sphere_radius_property_;
-
-  rviz::IntProperty* lower_bound_reachability_;
-  rviz::IntProperty* upper_bound_reachability_;
-  rviz::BoolProperty* is_byReachability_;
-  rviz::EnumProperty* shape_property_;
-  rviz::EnumProperty* disect_property_;
+  rviz_common::properties::IntProperty* lower_bound_reachability_;
+  rviz_common::properties::IntProperty* upper_bound_reachability_;
+  rviz_common::properties::BoolProperty* is_byReachability_;
+  rviz_common::properties::EnumProperty* shape_property_;
+  rviz_common::properties::EnumProperty* disect_property_;
 };
 
 }  // end namespace reachability_map_visualizer

@@ -1,12 +1,17 @@
-#include <OGRE/OgreVector3.h>
-#include <OGRE/OgreSceneNode.h>
-#include <OGRE/OgreSceneManager.h>
 
-#include <rviz/ogre_helpers/arrow.h>
-#include <rviz/ogre_helpers/shape.h>
-#include <rviz/display_context.h>
-#include <rviz/display_factory.h>
 
+// #define OGRE_VECTOR2_EXTENSIONS
+// #define OGRE_VECTOR3_EXTENSIONS
+
+#include <rviz_rendering/objects/arrow.hpp>
+#include <rviz_rendering/objects/shape.hpp>
+#include <rviz_common/display_context.hpp>
+// #include <rviz_common/display_factory.hpp>
+#include <rviz_common/factory/factory.hpp>
+
+// #include <OgreVector3.h>
+#include <OgreSceneNode.h>
+#include <OgreSceneManager.h>
 #include <tf2/LinearMath/Quaternion.h>
 
 #include "reachability_map_visual.h"
@@ -15,7 +20,7 @@
 namespace reachability_map_visualizer
 {
 ReachMapVisual::ReachMapVisual(Ogre::SceneManager* scene_manager, Ogre::SceneNode* parent_node,
-                               rviz::DisplayContext* display_context)
+                               rviz_common::DisplayContext* display_context)
 {
   scene_manager_ = scene_manager;
   frame_node_ = parent_node->createChildSceneNode();
@@ -28,7 +33,7 @@ ReachMapVisual::~ReachMapVisual()
   scene_manager_->destroySceneNode(frame_node_);
 }
 
-void ReachMapVisual::setMessage(const reachability_map_visualizer::WorkSpace::ConstPtr& msg, bool do_display_arrow,
+void ReachMapVisual::setMessage(const reachability_map_visualizer::msg::WorkSpace::ConstPtr& msg, bool do_display_arrow,
                                 bool do_display_sphere, int low_ri, int high_ri, int shape_choice, int disect_choice)
 {
   int low_SphereSize, up_SphereSize;
@@ -39,50 +44,50 @@ void ReachMapVisual::setMessage(const reachability_map_visualizer::WorkSpace::Co
     case 0:
     {
       low_SphereSize = 0;
-      up_SphereSize = msg->WsSpheres.size();
+      up_SphereSize = msg->ws_spheres.size();
       break;
     }
     case 1:
     {
       low_SphereSize = 0;
-      up_SphereSize = msg->WsSpheres.size() / 2;
+      up_SphereSize = msg->ws_spheres.size() / 2;
       break;
     }
     case 2:
     {
-      low_SphereSize = msg->WsSpheres.size() / 2;
-      up_SphereSize = msg->WsSpheres.size();
+      low_SphereSize = msg->ws_spheres.size() / 2;
+      up_SphereSize = msg->ws_spheres.size();
       break;
     }
     case 3:
     {
-      low_SphereSize = msg->WsSpheres.size() / 2.2;
-      up_SphereSize = msg->WsSpheres.size() / 1.8;
+      low_SphereSize = msg->ws_spheres.size() / 2.2;
+      up_SphereSize = msg->ws_spheres.size() / 1.8;
       break;
     }
     case 4:
     {
       low_SphereSize = 0;
-      up_SphereSize = msg->WsSpheres.size() / 1.1;
+      up_SphereSize = msg->ws_spheres.size() / 1.1;
       break;
     }
   }
 
   if (do_display_arrow)
   {
-    boost::shared_ptr< rviz::Arrow > pose_arrow;
+    std::shared_ptr< rviz_rendering::Arrow > pose_arrow;
     for (size_t i = low_SphereSize; i < up_SphereSize; ++i)
     {
-      for (size_t j = 0; j < msg->WsSpheres[i].poses.size(); ++j)
+      for (size_t j = 0; j < msg->ws_spheres[i].poses.size(); ++j)
       {
-        if (low_ri < int(msg->WsSpheres[i].ri) && int(msg->WsSpheres[i].ri) <= high_ri)
+        if (low_ri < int(msg->ws_spheres[i].ri) && int(msg->ws_spheres[i].ri) <= high_ri)
         {
-          pose_arrow.reset(new rviz::Arrow(scene_manager_, frame_node_));
+          pose_arrow.reset(new rviz_rendering::Arrow(scene_manager_, frame_node_));
 
-          Ogre::Vector3 position_(msg->WsSpheres[i].poses[j].position.x, msg->WsSpheres[i].poses[j].position.y,
-                                  msg->WsSpheres[i].poses[j].position.z);
-          tf2::Quaternion quat(msg->WsSpheres[i].poses[j].orientation.x, msg->WsSpheres[i].poses[j].orientation.y,
-                               msg->WsSpheres[i].poses[j].orientation.z, msg->WsSpheres[i].poses[j].orientation.w);
+          Ogre::Vector3 position_(msg->ws_spheres[i].poses[j].position.x, msg->ws_spheres[i].poses[j].position.y,
+                                  msg->ws_spheres[i].poses[j].position.z);
+          tf2::Quaternion quat(msg->ws_spheres[i].poses[j].orientation.x, msg->ws_spheres[i].poses[j].orientation.y,
+                               msg->ws_spheres[i].poses[j].orientation.z, msg->ws_spheres[i].poses[j].orientation.w);
 
           tf2::Quaternion q2;
           q2.setRPY(0, -M_PI / 2, 0);  // Arrows are pointed as -z direction. So rotating it is necessary
@@ -93,7 +98,7 @@ void ReachMapVisual::setMessage(const reachability_map_visualizer::WorkSpace::Co
 
           if (position_.isNaN() || orientation_.isNaN())
           {
-            ROS_WARN("received invalid pose");
+            // RCLCPP_WARN(rclcpp::get_logger("ReachMapVisual"),"received invalid pose");
             return;
           }
 
@@ -107,43 +112,43 @@ void ReachMapVisual::setMessage(const reachability_map_visualizer::WorkSpace::Co
   }
   if (do_display_sphere)
   {
-    boost::shared_ptr< rviz::Shape > sphere_center;
+    std::shared_ptr< rviz_rendering::Shape > sphere_center;
     int colorRI;
 
     for (size_t i = low_SphereSize; i < up_SphereSize; ++i)
     {
-      if (low_ri <= int(msg->WsSpheres[i].ri) && int(msg->WsSpheres[i].ri <= high_ri))
+      if (low_ri <= int(msg->ws_spheres[i].ri) && int(msg->ws_spheres[i].ri <= high_ri))
       {
         switch (shape_choice)
         {
           case 0:
           {
-            sphere_center.reset(new rviz::Shape(rviz::Shape::Sphere, scene_manager_, frame_node_));
+            sphere_center.reset(new rviz_rendering::Shape(rviz_rendering::Shape::Sphere, scene_manager_, frame_node_));
             break;
           }
           case 1:
           {
-            sphere_center.reset(new rviz::Shape(rviz::Shape::Cylinder, scene_manager_, frame_node_));
+            sphere_center.reset(new rviz_rendering::Shape(rviz_rendering::Shape::Cylinder, scene_manager_, frame_node_));
             break;
           }
           case 2:
           {
-            sphere_center.reset(new rviz::Shape(rviz::Shape::Cone, scene_manager_, frame_node_));
+            sphere_center.reset(new rviz_rendering::Shape(rviz_rendering::Shape::Cone, scene_manager_, frame_node_));
             break;
           }
           case 3:
           {
-            sphere_center.reset(new rviz::Shape(rviz::Shape::Cube, scene_manager_, frame_node_));
+            sphere_center.reset(new rviz_rendering::Shape(rviz_rendering::Shape::Cube, scene_manager_, frame_node_));
             break;
           }
         }
 
-        Ogre::Vector3 position_sphere(msg->WsSpheres[i].point.x, msg->WsSpheres[i].point.y, msg->WsSpheres[i].point.z);
+        Ogre::Vector3 position_sphere(msg->ws_spheres[i].point.x, msg->ws_spheres[i].point.y, msg->ws_spheres[i].point.z);
         Ogre::Quaternion orientation_sphere(0, 0, 0, 1);
-        colorRI = msg->WsSpheres[i].ri;
+        colorRI = msg->ws_spheres[i].ri;
         if (position_sphere.isNaN())
         {
-          ROS_WARN("received invalid sphere coordinate");
+          // RCLCPP_WARN(rclcpp::get_logger("ReachMapVisual"),"received invalid sphere coordinate");
           return;
         }
         sphere_center->setPosition(position_sphere);

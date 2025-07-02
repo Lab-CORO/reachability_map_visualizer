@@ -1,14 +1,16 @@
-#include <OGRE/OgreSceneNode.h>
-#include <OGRE/OgreSceneManager.h>
+#include <OgreSceneNode.h>
+#include <OgreSceneManager.h>
 
-#include <tf/transform_listener.h>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/buffer.h>
 
-#include <rviz/visualization_manager.h>
-#include <rviz/properties/color_property.h>
-#include <rviz/properties/float_property.h>
-#include <rviz/properties/int_property.h>
-#include <rviz/properties/enum_property.h>
-#include <rviz/frame_manager.h>
+
+#include <rviz_common/visualization_manager.hpp>
+#include <rviz_common/properties/color_property.hpp>
+#include <rviz_common/properties/float_property.hpp>
+#include <rviz_common/properties/int_property.hpp>
+#include <rviz_common/properties/enum_property.hpp>
+#include <rviz_common/frame_manager_iface.hpp>
 
 #include "reachability_map_visual.h"
 
@@ -18,11 +20,11 @@ namespace reachability_map_visualizer
 {
 ReachMapDisplay::ReachMapDisplay()
 {
-  do_display_arrow_ = new rviz::BoolProperty("Show Poses", false, "Displays the arrow.", this);
-  do_display_sphere_ = new rviz::BoolProperty("Show Shape", true, "Displays the spheres.", this);
-  is_byReachability_ = new rviz::BoolProperty("Color by Reachability", true, "Color transform by Reachability Index", this);
+  do_display_arrow_ = new rviz_common::properties::BoolProperty("Show Poses", false, "Displays the arrow.", this);
+  do_display_sphere_ = new rviz_common::properties::BoolProperty("Show Shape", true, "Displays the spheres.", this);
+  is_byReachability_ = new rviz_common::properties::BoolProperty("Color by Reachability", true, "Color transform by Reachability Index", this);
 
-  shape_property_ = new rviz::EnumProperty("Shape", "Sphere", "Shape to display the workspace.", this,
+  shape_property_ = new rviz_common::properties::EnumProperty("Shape", "Sphere", "Shape to display the workspace.", this,
                                            SLOT(updateColorAndAlphaArrow()));
   shape_property_->addOption("Sphere", Sphere);
   shape_property_->addOption("Cylinder", Cylinder);
@@ -30,7 +32,7 @@ ReachMapDisplay::ReachMapDisplay()
   shape_property_->addOption("Cube", Cube);
 
   disect_property_ =
-      new rviz::EnumProperty("Disect", "Full", "Disection of the workspace", this, SLOT(updateColorAndAlphaArrow()));
+      new rviz_common::properties::EnumProperty("Disect", "Full", "Disection of the workspace", this, SLOT(updateColorAndAlphaArrow()));
   disect_property_->addOption("Full", Full);
   disect_property_->addOption("1st_Half", First_Half);
   disect_property_->addOption("2nd_Half", Second_Half);
@@ -38,34 +40,34 @@ ReachMapDisplay::ReachMapDisplay()
   disect_property_->addOption("End_Slice", End_Slice);
 
   // Arrow Property category
-  arrow_category_ = new rviz::Property("Poses Property", QVariant(), "", this);
+  arrow_category_ = new rviz_common::properties::Property("Poses Property", QVariant(), "", this);
 
-  arrow_color_property_ = new rviz::ColorProperty("Color", QColor(204, 51, 204), "Color to draw the Pose arrows.",
+  arrow_color_property_ = new rviz_common::properties::ColorProperty("Color", QColor(204, 51, 204), "Color to draw the Pose arrows.",
                                                   arrow_category_, SLOT(updateColorAndAlphaArrow()), this);
 
-  arrow_alpha_property_ = new rviz::FloatProperty("Alpha", 0.2, "0 is fully transparent, 1.0 is fully opaque.",
+  arrow_alpha_property_ = new rviz_common::properties::FloatProperty("Alpha", 0.2, "0 is fully transparent, 1.0 is fully opaque.",
                                                   arrow_category_, SLOT(updateColorAndAlphaArrow()), this);
 
   arrow_length_property_ =
-      new rviz::FloatProperty("Length", 0.01, "Length of the arrows", arrow_category_, SLOT(updateArrowSize()), this);
+      new rviz_common::properties::FloatProperty("Length", 0.01, "Length of the arrows", arrow_category_, SLOT(updateArrowSize()), this);
 
   // Shape Property category
 
-  sphere_category_ = new rviz::Property("Shape Property", QVariant(), "", this);
+  sphere_category_ = new rviz_common::properties::Property("Shape Property", QVariant(), "", this);
 
-  sphere_color_property_ = new rviz::ColorProperty("Color", QColor(255, 225, 102), "Color to draw the Sphere.",
+  sphere_color_property_ = new rviz_common::properties::ColorProperty("Color", QColor(255, 225, 102), "Color to draw the Sphere.",
                                                    sphere_category_, SLOT(updateColorAndAlphaSphere()), this);
 
-  sphere_alpha_property_ = new rviz::FloatProperty("Alpha", 1.0, "0 is fully transparent, 1.0 is fully opaque.",
+  sphere_alpha_property_ = new rviz_common::properties::FloatProperty("Alpha", 1.0, "0 is fully transparent, 1.0 is fully opaque.",
                                                    sphere_category_, SLOT(updateColorAndAlphaSphere()), this);
 
   sphere_radius_property_ =
-      new rviz::FloatProperty("Size", 0.05, "Size of the sphere", sphere_category_, SLOT(updateSphereSize()), this);
+      new rviz_common::properties::FloatProperty("Size", 0.05, "Size of the sphere", sphere_category_, SLOT(updateSphereSize()), this);
 
-  lower_bound_reachability_ = new rviz::IntProperty("Lowest Reachability Index", 0, "Lowest Reachability index.", this);
+  lower_bound_reachability_ = new rviz_common::properties::IntProperty("Lowest Reachability Index", 0, "Lowest Reachability index.", this);
 
   upper_bound_reachability_ =
-      new rviz::IntProperty("Highest Reachability Index", 100, "Highest Reachability index.", this);
+      new rviz_common::properties::IntProperty("Highest Reachability Index", 100, "Highest Reachability index.", this);
 }
 
 void ReachMapDisplay::onInitialize()
@@ -122,17 +124,17 @@ void ReachMapDisplay::updateSphereSize()
   }
 }
 
-void ReachMapDisplay::processMessage(const reachability_map_visualizer::WorkSpace::ConstPtr& msg)
+void ReachMapDisplay::processMessage(reachability_map_visualizer::msg::WorkSpace::ConstSharedPtr msg)
 {
   Ogre::Quaternion orientation;
   Ogre::Vector3 position;
   if (!context_->getFrameManager()->getTransform(msg->header.frame_id, msg->header.stamp, position, orientation))
   {
-    ROS_DEBUG("Error transforming from frame '%s' to frame '%s'", msg->header.frame_id.c_str(),
-              qPrintable(fixed_frame_));
+    // RCLCPP_INFO(this->get_logger(),"Error transforming from frame '%s' to frame '%s'", msg->header.frame_id.c_str(),
+    //           qPrintable(fixed_frame_));
     return;
   }
-  boost::shared_ptr< ReachMapVisual > visual;
+  std::shared_ptr< ReachMapVisual > visual;
   visuals_.clear();
   visual.reset(new ReachMapVisual(context_->getSceneManager(), scene_node_, context_));
 
@@ -165,5 +167,5 @@ void ReachMapDisplay::processMessage(const reachability_map_visualizer::WorkSpac
 }
 
 }  // end namespace reachability_map_visualizer
-#include <pluginlib/class_list_macros.h>
-PLUGINLIB_EXPORT_CLASS(reachability_map_visualizer::ReachMapDisplay, rviz::Display)
+#include <pluginlib/class_list_macros.hpp>
+PLUGINLIB_EXPORT_CLASS(reachability_map_visualizer::ReachMapDisplay, rviz_common::Display)
