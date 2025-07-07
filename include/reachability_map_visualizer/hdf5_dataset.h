@@ -42,6 +42,8 @@ public:
   bool loadMapsFromDataset(MultiMap& poses, MapVecDouble& spheres, float &resolution);
 
   bool h5ToResolution(float &resolution);
+  bool h5ToSpheres(MapVecDouble& sphere_col, double resolution, double size);
+
 
 private:
   bool h5ToMultiMapPosesAndSpheres(MultiMapPtr& pose_col, MapVecDoublePtr& sphere_col);
@@ -58,6 +60,8 @@ private:
 
   hid_t file_ = -1;
   hid_t group_poses_ = -1;
+  hid_t group_reachability_map_ = -1;
+  hid_t reachability_map = -1;
   hid_t group_spheres_ = -1;
   hid_t poses_dataset_ = -1;
   hid_t sphere_dataset_ = -1;

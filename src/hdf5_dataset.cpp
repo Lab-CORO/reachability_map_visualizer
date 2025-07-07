@@ -60,23 +60,23 @@ bool Hdf5Dataset::open()
   RCLCPP_INFO(rclcpp::get_logger("Hdf5Dataset"), "Opening map %s", fullpath.c_str());
   this->file_ = H5Fopen(fullpath.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
 
-  this->group_poses_ = H5Gopen(this->file_, "/Poses", H5P_DEFAULT);
-  this->poses_dataset_ = H5Dopen(this->group_poses_, "poses_dataset", H5P_DEFAULT);
+  this->group_reachability_map_ = H5Gopen(this->file_, "/array_10", H5P_DEFAULT);
+  this->reachability_map = H5Dopen(this->group_reachability_map_, "reachability_map", H5P_DEFAULT);
 
-  this->group_spheres_ = H5Gopen(this->file_, "/Spheres", H5P_DEFAULT);
-  this->sphere_dataset_ = H5Dopen(this->group_spheres_, "sphere_dataset", H5P_DEFAULT);
+  // this->group_spheres_ = H5Gopen(this->file_, "/Spheres", H5P_DEFAULT);
+  // this->sphere_dataset_ = H5Dopen(this->group_spheres_, "sphere_dataset", H5P_DEFAULT);
 
-  this->attr_ = H5Aopen(this->sphere_dataset_, "Resolution", H5P_DEFAULT);
-  herr_t ret = H5Aread(this->attr_, H5T_NATIVE_FLOAT, &this->res_);
+  // this->attr_ = H5Aopen(this->sphere_dataset_, "Resolution", H5P_DEFAULT);
+  // herr_t ret = H5Aread(this->attr_, H5T_NATIVE_FLOAT, &this->res_);
 }
 
 void Hdf5Dataset::close()
 {
-  H5Aclose(this->attr_);
-  H5Dclose(this->poses_dataset_);
-  H5Gclose(this->group_poses_);
-  H5Dclose(this->sphere_dataset_);
-  H5Gclose(this->group_spheres_);
+  // H5Aclose(this->attr_);
+  H5Dclose(this->reachability_map);
+  // H5Gclose(this->group_poses_);
+  // H5Dclose(this->sphere_dataset_);
+  // H5Gclose(this->group_spheres_);
   H5Fclose(this->file_);
 }
 
@@ -481,5 +481,62 @@ bool Hdf5Dataset::loadMapsFromDataset(MultiMap& poses, MapVecDouble& spheres, fl
   close();
   return true;
 }
+
+
+
+bool Hdf5Dataset::h5ToSpheres(MapVecDouble& sphere_col, double resolution, double size)
+{
+  RCLCPP_INFO(rclcpp::get_logger("load_reachability_map"), "Generating map...");
+
+  hid_t dataset = this->reachability_map;
+  hid_t dataspace = H5Dget_space(dataset);
+
+  int ndims = H5Sget_simple_extent_ndims(dataspace);
+  if (ndims != 3 && ndims != 4) {
+    RCLCPP_ERROR(rclcpp::get_logger("load_reachability_map"), "Expected a 3D/4D dataset, got %dD.", ndims);
+    return false;
+  }
+
+  hsize_t dims[4] = {0};
+  H5Sget_simple_extent_dims(dataspace, dims, NULL);
+
+  size_t d1 = dims[1];
+  size_t d2 = dims[2];
+  size_t d3 = dims[3];
+  size_t total_size = d1 * d2 * d3;
+
+  std::vector<float> data(total_size);
+
+  hsize_t offset[4] = {0, 0, 0, 0};
+  hsize_t count[4]  = {1, d1, d2, d3};
+  hid_t memspace = H5Screate_simple(4, count, NULL);
+  H5Sselect_hyperslab(dataspace, H5S_SELECT_SET, offset, NULL, count, NULL);
+
+  herr_t status = H5Dread(dataset, H5T_NATIVE_FLOAT, memspace, dataspace, H5P_DEFAULT, data.data());
+  if (status < 0) {
+    RCLCPP_ERROR(rclcpp::get_logger("load_reachability_map"), "Failed to read HDF5 dataset.");
+    return false;
+  }
+
+  for (size_t i = 0; i < d1; ++i) {
+    for (size_t j = 0; j < d2; ++j) {
+      for (size_t k = 0; k < d3; ++k) {
+        size_t index = i * d2 * d3 + j * d3 + k;
+        float ri = data[index];
+        if (ri != 0.0f) {
+          std::vector<double> key = {
+            -size + resolution * static_cast<double>(i),
+            -size + resolution * static_cast<double>(j),
+            -size + resolution * static_cast<double>(k)};
+          sphere_col[key] = ri*100;
+        }
+      }
+    }
+  }
+
+  RCLCPP_INFO(rclcpp::get_logger("load_reachability_map"), "Map generation complete.");
+  return true;
+}
+
 
 }  // namespace hdf5_dataset
