@@ -15,6 +15,7 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(visualization_msgs REQUIRED)
 
 find_package(Qt5 REQUIRED COMPONENTS Widgets)
 find_package(HDF5 REQUIRED)
@@ -102,6 +103,7 @@ add_executable(load_reachability_voxel src/load_reachability_voxel.cpp)
 ament_target_dependencies(load_reachability_voxel
         rclcpp
         std_msgs
+        visualization_msgs
         geometry_msgs
 )
 target_link_libraries(load_reachability_voxel

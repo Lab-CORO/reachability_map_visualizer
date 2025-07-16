@@ -9,7 +9,9 @@
 #include "geometry_msgs/msg/pose.hpp"
 
 #include "reachability_map_visualizer/hdf5_dataset.h"
-
+#include "geometry_msgs/msg/point.hpp"
+#include <visualization_msgs/msg/marker.hpp>
+#include <std_msgs/msg/color_rgba.hpp>
 using namespace std::chrono_literals;
 using namespace hdf5_dataset;
 
@@ -27,6 +29,7 @@ int main(int argc, char **argv)
   auto node = rclcpp::Node::make_shared("workspace");
 
   auto publisher = node->create_publisher<reachability_map_visualizer::msg::WorkSpace>("reachability_map", 1);
+  auto publisher_voxel = node->create_publisher<visualization_msgs::msg::Marker>("voxel_grid", 1);
 
 
 
@@ -46,10 +49,47 @@ int main(int argc, char **argv)
   h5.open();
 
   MapVecDouble sphere_col;
+  std::vector<std::array<double, 3>> voxels;
   h5.h5ToSpheres(sphere_col, resolution_, size_);
-
+  h5.h5ToCollision(voxels, resolution_, size_);
  
-  // Create message
+  // delete previous markers
+  visualization_msgs::msg::Marker del_marker;
+  del_marker.header.stamp = node->get_clock()->now();
+  del_marker.header.frame_id = "base_footprint";
+  // marker.id = index;
+  del_marker.action = 3;
+  publisher_voxel->publish(del_marker);
+
+
+  // Create voxel grid msg
+  visualization_msgs::msg::Marker marker;
+  marker.header.stamp = node->get_clock()->now();
+  marker.header.frame_id = "base_footprint";
+  marker.id = index;
+  marker.type = 6; // Cube list
+  for (const auto& voxel : voxels)
+  {
+    geometry_msgs::msg::Point point;
+    point.x = voxel[0];
+    point.y = voxel[1];
+    point.z = voxel[2];
+    marker.points.push_back(point);
+
+    std_msgs::msg::ColorRGBA color;
+    color.r = 1.0;
+    color.a = 1.0;
+    marker.colors.push_back(color);
+  }
+  marker.scale.x = 0.08;
+  marker.scale.y = 0.08;
+  marker.scale.z = 0.08;
+  marker.color.r = 1.0;
+
+  // send msg
+  publisher_voxel->publish(marker);
+
+  // Create message RM
   auto ws_msg = std::make_shared<reachability_map_visualizer::msg::WorkSpace>();
 
   ws_msg->header.stamp = node->get_clock()->now();

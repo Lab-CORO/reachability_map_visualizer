@@ -88,7 +88,7 @@ bool Hdf5Dataset::open()
     return false;
   }
 
-  this->reachability_map = H5Dopen(this->group_reachability_map_, "voxel_grid", H5P_DEFAULT);
+  this->voxel_grid = H5Dopen(this->group_reachability_map_, "voxel_grid", H5P_DEFAULT);
   if (this->reachability_map < 0) {
     RCLCPP_ERROR(rclcpp::get_logger("Hdf5Dataset"), "Dataset 'reachability_map' not found in group: %s", full_group_path.c_str());
     return false;
@@ -101,6 +101,7 @@ void Hdf5Dataset::close()
 {
   // H5Aclose(this->attr_);
   H5Dclose(this->reachability_map);
+  H5Dclose(this->voxel_grid);
   // H5Gclose(this->group_poses_);
   // H5Dclose(this->sphere_dataset_);
   // H5Gclose(this->group_spheres_);
@@ -576,6 +577,77 @@ bool Hdf5Dataset::h5ToSpheres(MapVecDouble& sphere_col, double resolution, doubl
 
   RCLCPP_INFO(rclcpp::get_logger("load_reachability_map"), "Map generation complete.");
   return true;
+}
+
+
+
+
+
+
+bool Hdf5Dataset::h5ToCollision(std::vector<std::array<double, 3>> & obstacles, double resolution, double size){
+  RCLCPP_INFO(rclcpp::get_logger("load_reachability_map"), "Generating map...");
+
+  if (this->reachability_map < 0) {
+    RCLCPP_ERROR(rclcpp::get_logger("load_reachability_map"), "Invalid dataset handle.");
+    return false;
+  }
+
+  hid_t dataset = this->voxel_grid;
+  hid_t dataspace = H5Dget_space(dataset);
+
+  int ndims = H5Sget_simple_extent_ndims(dataspace);
+  if (ndims != 3 && ndims != 4) {
+    RCLCPP_ERROR(rclcpp::get_logger("load_reachability_map"), "Expected a 3D or 4D dataset, got %dD.", ndims);
+    H5Sclose(dataspace);
+    return false;
+  }
+
+  hsize_t dims[4] = {1, 0, 0, 0};  // default for 3D
+  H5Sget_simple_extent_dims(dataspace, dims, NULL);
+
+  size_t d0 = (ndims == 4) ? dims[0] : 1;
+  size_t d1 = (ndims == 4) ? dims[1] : dims[0];
+  size_t d2 = (ndims == 4) ? dims[2] : dims[1];
+  size_t d3 = (ndims == 4) ? dims[3] : dims[2];
+
+  size_t total_size = d1 * d2 * d3;
+  std::vector<float> data(total_size);
+
+  // Read only the first slice if 4D
+  hsize_t mem_dims[3] = {d1, d2, d3};
+  hid_t memspace = H5Screate_simple(3, mem_dims, NULL);  if (ndims == 4) {
+    hsize_t offset[4] = {0, 0, 0, 0};
+    hsize_t count[4]  = {1, d1, d2, d3};
+    H5Sselect_hyperslab(dataspace, H5S_SELECT_SET, offset, NULL, count, NULL);
+  }
+
+  herr_t status = H5Dread(dataset, H5T_NATIVE_FLOAT, memspace, dataspace, H5P_DEFAULT, data.data());
+  H5Sclose(dataspace);
+  H5Sclose(memspace);
+
+  if (status < 0) {
+    RCLCPP_ERROR(rclcpp::get_logger("load_reachability_map"), "Failed to read HDF5 dataset.");
+    return false;
+  }
+
+  for (size_t i = 0; i < d1; ++i) {
+    for (size_t j = 0; j < d2; ++j) {
+      for (size_t k = 0; k < d3; ++k) {
+        size_t index = i * d2 * d3 + j * d3 + k;
+        float ri = data[index];
+        if (ri != 0.0f) {
+          // add it in the vector
+          double x = i * 0.08 - size;
+          double y = j * 0.08 - size;
+          double z = k * 0.08 - size;
+          obstacles.push_back({x, y, z});
+        }
+      }
+    }
+  }
+
+  RCLCPP_INFO(rclcpp::get_logger("load_reachability_map"), "Map generation complete.");
+  return true;  
 }
 
 }  // namespace hdf5_dataset
