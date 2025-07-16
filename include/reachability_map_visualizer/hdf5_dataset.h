@@ -44,6 +44,7 @@ public:
 
   bool h5ToResolution(float &resolution);
   bool h5ToSpheres(MapVecDouble& sphere_col, double resolution, double size);
+  bool h5ToCollision(std::vector<std::array<double, 3>> & obstacles, double resolution, double size);
 
 
 private:
@@ -63,6 +64,7 @@ private:
   hid_t group_poses_ = -1;
   hid_t group_reachability_map_ = -1;
   hid_t reachability_map = -1;
+  hid_t voxel_grid = -1;
   hid_t group_spheres_ = -1;
   hid_t poses_dataset_ = -1;
   hid_t sphere_dataset_ = -1;
