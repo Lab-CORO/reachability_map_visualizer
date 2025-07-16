@@ -85,6 +85,7 @@ target_link_libraries(reachability_map_plugin
 # Executable
 # ------------------------------------------------------------------------------
 
+# Classic map
 add_executable(load_reachability_map src/load_reachability_map.cpp)
 ament_target_dependencies(load_reachability_map
         rclcpp
@@ -96,6 +97,7 @@ target_link_libraries(load_reachability_map
         "${cpp_typesupport_target}"
 )
 
+# Voxel map
 add_executable(load_reachability_voxel src/load_reachability_voxel.cpp)
 ament_target_dependencies(load_reachability_voxel
         rclcpp

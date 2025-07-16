@@ -30,6 +30,7 @@ class Hdf5Dataset
 public:
   Hdf5Dataset(std::string path, std::string filename);
   Hdf5Dataset(std::string fullpath);
+  Hdf5Dataset(std::string fullpath, int index);
 
   bool open();
   void close();
@@ -67,6 +68,7 @@ private:
   hid_t sphere_dataset_ = -1;
   hid_t attr_ = -1;
   float res_ = 0.0;
+  int index = 0;
 };
 
 }  // namespace reachability_map_visualizer
