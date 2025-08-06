@@ -637,9 +637,9 @@ bool Hdf5Dataset::h5ToCollision(std::vector<std::array<double, 3>> & obstacles, 
         float ri = data[index];
         if (ri != 0.0f) {
           // add it in the vector
-          double x = i * 0.08 - size;
-          double y = j * 0.08 - size;
-          double z = k * 0.08 - size;
+          double x = i * 0.02 - size;
+          double y = j * 0.02 - size;
+          double z = k * 0.02 - size;
           obstacles.push_back({x, y, z});
         }
       }

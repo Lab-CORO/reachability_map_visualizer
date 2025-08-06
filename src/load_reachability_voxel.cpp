@@ -12,8 +12,24 @@
 #include "geometry_msgs/msg/point.hpp"
 #include <visualization_msgs/msg/marker.hpp>
 #include <std_msgs/msg/color_rgba.hpp>
+#include <std_msgs/msg/int16.hpp>
 using namespace std::chrono_literals;
 using namespace hdf5_dataset;
+
+static int index_map = 0;
+static    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr  publisher_voxel;
+
+void next_callback(const std_msgs::msg::Int16::SharedPtr msg){
+    // delete previous markers
+  visualization_msgs::msg::Marker del_marker;
+  // del_marker.header.stamp = node->get_clock()->now();
+  del_marker.header.frame_id = "base_footprint";
+  // marker.id = index;
+  del_marker.action = 3;
+  publisher_voxel->publish(del_marker);
+  index_map = msg->data;
+}
+
 
 int main(int argc, char **argv)
 {
@@ -29,22 +45,23 @@ int main(int argc, char **argv)
   auto node = rclcpp::Node::make_shared("workspace");
 
   auto publisher = node->create_publisher<reachability_map_visualizer::msg::WorkSpace>("reachability_map", 1);
-  auto publisher_voxel = node->create_publisher<visualization_msgs::msg::Marker>("voxel_grid", 1);
+  publisher_voxel = node->create_publisher<visualization_msgs::msg::Marker>("voxel_grid", 1);
+  auto subscription = node->create_subscription<std_msgs::msg::Int16>(
+            "/index", 10, next_callback );
 
 
-
-  double resolution_ = 0.08; 
+  double resolution_ = 0.02; 
   double size_ = 1.5;
 
-  int index = 0;
+  // int index = 0;
 
   // Loop to publish
-  rclcpp::Rate loop_rate(0.2);  // 0.2 Hz = every 5 seconds
+  rclcpp::Rate loop_rate(1);  // 0.2 Hz = every 5 seconds
   while (rclcpp::ok())
   {
 
   // extract data to pose and ri
-  hdf5_dataset::Hdf5Dataset h5(argv[1], index);
+  hdf5_dataset::Hdf5Dataset h5(argv[1], index_map);
 
   h5.open();
 
@@ -53,20 +70,14 @@ int main(int argc, char **argv)
   h5.h5ToSpheres(sphere_col, resolution_, size_);
   h5.h5ToCollision(voxels, resolution_, size_);
  
-  // delete previous markers
-  visualization_msgs::msg::Marker del_marker;
-  del_marker.header.stamp = node->get_clock()->now();
-  del_marker.header.frame_id = "base_footprint";
-  // marker.id = index;
-  del_marker.action = 3;
-  publisher_voxel->publish(del_marker);
+
 
 
   // Create voxel grid msg
   visualization_msgs::msg::Marker marker;
   marker.header.stamp = node->get_clock()->now();
   marker.header.frame_id = "base_footprint";
-  marker.id = index;
+  marker.id = index_map;
   marker.type = 6; // Cube list
   for (const auto& voxel : voxels)
   {
@@ -78,13 +89,13 @@ int main(int argc, char **argv)
 
     std_msgs::msg::ColorRGBA color;
     color.r = 1.0;
-    color.a = 1.0;
+    color.a = 0.50;
     marker.colors.push_back(color);
   }
   marker.scale.x = 0.08;
   marker.scale.y = 0.08;
   marker.scale.z = 0.08;
-  marker.color.r = 1.0;
+  // marker.color.r = .0;
 
   // send msg
   publisher_voxel->publish(marker);
@@ -110,7 +121,7 @@ int main(int argc, char **argv)
 
     ws_msg->header.stamp = node->get_clock()->now();
     publisher->publish(*ws_msg);
-    index = (index +1) % 10;
+    // index = (index +1) % modulo;
     rclcpp::spin_some(node);
     loop_rate.sleep();
   }
