@@ -17,11 +17,14 @@ namespace rviz_rendering
 class Arrow;
 class Shape;
 }
-struct PointWithIntensity {
-  float x;
-  float y;
-  float z;
-  uint8_t intensity; // Assuming intensity is an 8-bit unsigned integer
+enum Disect
+{
+  None,
+  X,
+  Y,
+  Z,
+  // Middle_Slice,
+  // End_Slice,
 };
 namespace reachability_map_visualizer
 {
@@ -32,7 +35,7 @@ public:
   ReachMapVisual(Ogre::SceneManager* scene_manager, Ogre::SceneNode* parent_node, rviz_common::DisplayContext* display);
   virtual ~ReachMapVisual();
   void setMessage(const reachability_map_visualizer::msg::WorkSpace::ConstPtr& msg, bool do_display_arrow, bool do_display_sphere,
-                  int low_ri, int high_ri, int shape_choice, int disect_choice);
+                  int low_ri, int high_ri, float disect_max_, float disect_min_, int disect_choice);
   void setFramePosition(const Ogre::Vector3& position);
   void setFrameOrientation(const Ogre::Quaternion& orientation);
 

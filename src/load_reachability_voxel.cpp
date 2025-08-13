@@ -50,8 +50,7 @@ int main(int argc, char **argv)
             "/index", 10, next_callback );
 
 
-  double resolution_ = 0.02; 
-  double size_ = 1.5;
+
 
   // int index = 0;
 
@@ -64,11 +63,12 @@ int main(int argc, char **argv)
   hdf5_dataset::Hdf5Dataset h5(argv[1], index_map);
 
   h5.open();
-
+    double resolution_ = h5.get_resolution(); 
+  double origine_offset = h5.get_origine_offset();
   MapVecDouble sphere_col;
   std::vector<std::array<double, 3>> voxels;
-  h5.h5ToSpheres(sphere_col, resolution_, size_);
-  h5.h5ToCollision(voxels, resolution_, size_);
+  h5.h5ToSpheres(sphere_col, resolution_, origine_offset);
+  h5.h5ToCollision(voxels, resolution_, origine_offset);
  
 
 
@@ -76,7 +76,7 @@ int main(int argc, char **argv)
   // Create voxel grid msg
   visualization_msgs::msg::Marker marker;
   marker.header.stamp = node->get_clock()->now();
-  marker.header.frame_id = "base_footprint";
+  marker.header.frame_id = "base_link";
   marker.id = index_map;
   marker.type = 6; // Cube list
   for (const auto& voxel : voxels)
@@ -92,9 +92,9 @@ int main(int argc, char **argv)
     color.a = 0.50;
     marker.colors.push_back(color);
   }
-  marker.scale.x = 0.02;
-  marker.scale.y = 0.02;
-  marker.scale.z = 0.02;
+  marker.scale.x = resolution_;
+  marker.scale.y = resolution_;
+  marker.scale.z = resolution_;
   // marker.color.r = .0;
 
   // send msg
@@ -104,7 +104,7 @@ int main(int argc, char **argv)
   auto ws_msg = std::make_shared<reachability_map_visualizer::msg::WorkSpace>();
 
   ws_msg->header.stamp = node->get_clock()->now();
-  ws_msg->header.frame_id = "map";
+  ws_msg->header.frame_id = "base_link";
   ws_msg->resolution = resolution_;
 
   for (const auto& sphere_pair : sphere_col)

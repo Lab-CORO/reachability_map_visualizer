@@ -30,7 +30,7 @@ namespace reachability_map_visualizer
   frame_node_ = parent_node->createChildSceneNode();
   point_cloud_visual_ = new rviz_rendering::PointCloud();
   point_cloud_visual_->setRenderMode(rviz_rendering::PointCloud::RM_SPHERES);
-  point_cloud_visual_->setAlpha(0.60f);
+  point_cloud_visual_->setAlpha(1.0f);
   point_cloud_visual_->setDimensions(0.02f, 0.02f, 0.02f);
 
   frame_node_->attachObject(point_cloud_visual_);
@@ -120,11 +120,12 @@ void ReachMapVisual::convertPointsToPointCloud(const reachability_map_visualizer
 
 
 void ReachMapVisual::setMessage(const reachability_map_visualizer::msg::WorkSpace::ConstPtr& msg, bool do_display_arrow, bool do_display_sphere,
-                  int low_ri, int high_ri, int shape_choice, int disect_choice)
+                  int low_ri, int high_ri, float disect_max_, float disect_min_, int disect_choice)
 {
 
 
   point_cloud_visual_->clear();
+  point_cloud_visual_->setDimensions(msg->resolution, msg->resolution, msg->resolution);
 
   std::vector<rviz_rendering::PointCloud::Point> points;
   points.reserve(msg->ws_spheres.size()); // assuming your message has a vector called 'points'
@@ -132,6 +133,16 @@ void ReachMapVisual::setMessage(const reachability_map_visualizer::msg::WorkSpac
   for (const auto& point : msg->ws_spheres)
   {
     if (point.ri  < low_ri || point.ri  > high_ri){
+      continue;
+    }
+    if (disect_choice == Disect::X && (point.point.x < disect_min_ || point.point.x > disect_max_)  ){
+      continue;
+    }
+
+    if (disect_choice == Disect::Y && (point.point.y < disect_min_ || point.point.y > disect_max_)  ){
+      continue;
+    }
+    if (disect_choice == Disect::Z && (point.point.z < disect_min_ || point.point.z > disect_max_)  ){
       continue;
     }
       rviz_rendering::PointCloud::Point pc;

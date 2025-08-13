@@ -39,11 +39,12 @@ public:
 
   enum Disect
   {
-    Full,
-    First_Half,
-    Second_Half,
-    Middle_Slice,
-    End_Slice,
+    None,
+    X,
+    Y,
+    Z,
+    // Middle_Slice,
+    // End_Slice,
   };
 
   ReachMapDisplay();
@@ -65,12 +66,16 @@ private:
   // std::vector< boost::shared_ptr< ReachMapVisual > > visuals_;
   std::vector<std::shared_ptr<ReachMapVisual>> visuals_;
   rviz_common::properties::Property* arrow_category_;
+  rviz_common::properties::Property* disect_category_;
+  
   rviz_common::properties::Property* sphere_category_;
 
   rviz_common::properties::BoolProperty* do_display_arrow_;
   rviz_common::properties::ColorProperty* arrow_color_property_;
   rviz_common::properties::FloatProperty* arrow_alpha_property_;
   rviz_common::properties::FloatProperty* arrow_length_property_;
+  rviz_common::properties::FloatProperty* disect_max_;
+  rviz_common::properties::FloatProperty* disect_min_;
 
   rviz_common::properties::BoolProperty* do_display_sphere_;
   rviz_common::properties::ColorProperty* sphere_color_property_;

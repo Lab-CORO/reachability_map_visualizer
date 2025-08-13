@@ -35,23 +35,12 @@ public:
   bool open();
   void close();
 
-  bool saveReachMapsToDataset(MultiMapPtr& poses, MapVecDoublePtr& spheres, float resolution);
-
-  bool loadMapsFromDataset(MultiMapPtr& poses, MapVecDoublePtr& spheres);
-  bool loadMapsFromDataset(MultiMapPtr& poses, MapVecDoublePtr& spheres, float &resolution);
-  bool loadMapsFromDataset(MultiMap& poses, MapVecDouble& spheres);
-  bool loadMapsFromDataset(MultiMap& poses, MapVecDouble& spheres, float &resolution);
-
-  bool h5ToResolution(float &resolution);
-  bool h5ToSpheres(MapVecDouble& sphere_col, double resolution, double size);
-  bool h5ToCollision(std::vector<std::array<double, 3>> & obstacles, double resolution, double size);
-
+  bool h5ToSpheres(MapVecDouble& sphere_col, double resolution, double origine_offset);
+  bool h5ToCollision(std::vector<std::array<double, 3>> & obstacles, double resolution, double origine_offset);
+  double get_resolution();
+  double get_origine_offset();
 
 private:
-  bool h5ToMultiMapPosesAndSpheres(MultiMapPtr& pose_col, MapVecDoublePtr& sphere_col);
-  bool h5ToMultiMapPoses(MultiMap& pose_col, MapVecDouble& sphere_col);
-  bool h5ToMultiMapPoses(MultiMap& pose_col);
-  bool h5ToMultiMapSpheres(MapVecDouble& sphere_col);
 
   bool checkPath(std::string path);
   bool checkFileName(std::string filename);
@@ -69,7 +58,8 @@ private:
   hid_t poses_dataset_ = -1;
   hid_t sphere_dataset_ = -1;
   hid_t attr_ = -1;
-  float res_ = 0.0;
+  double res_ = 0.0;
+  double origine_offset = 0.0;
   int index = 0;
 };
 
