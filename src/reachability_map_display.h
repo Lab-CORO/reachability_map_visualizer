@@ -37,15 +37,7 @@ public:
     Cube,
   };
 
-  enum Disect
-  {
-    None,
-    X,
-    Y,
-    Z,
-    // Middle_Slice,
-    // End_Slice,
-  };
+
 
   ReachMapDisplay();
   virtual ~ReachMapDisplay();
