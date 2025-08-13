@@ -92,9 +92,9 @@ int main(int argc, char **argv)
     color.a = 0.50;
     marker.colors.push_back(color);
   }
-  marker.scale.x = 0.08;
-  marker.scale.y = 0.08;
-  marker.scale.z = 0.08;
+  marker.scale.x = 0.02;
+  marker.scale.y = 0.02;
+  marker.scale.z = 0.02;
   // marker.color.r = .0;
 
   // send msg
@@ -104,19 +104,26 @@ int main(int argc, char **argv)
   auto ws_msg = std::make_shared<reachability_map_visualizer::msg::WorkSpace>();
 
   ws_msg->header.stamp = node->get_clock()->now();
-  ws_msg->header.frame_id = "base_footprint";
+  ws_msg->header.frame_id = "map";
   ws_msg->resolution = resolution_;
 
   for (const auto& sphere_pair : sphere_col)
   {
-    reachability_map_visualizer::msg::WsSphere wss;
-    wss.point.x = (sphere_pair.first)[0];
-    wss.point.y = (sphere_pair.first)[1];
-    wss.point.z = (sphere_pair.first)[2];
-    wss.ri = sphere_pair.second;
+    // if(sphere_pair.second >= 60){
+    
+      reachability_map_visualizer::msg::WsSphere wss;
+      wss.point.x = (sphere_pair.first)[0];
+      wss.point.y = (sphere_pair.first)[1];
+      wss.point.z = (sphere_pair.first)[2];
+      wss.ri = sphere_pair.second;
 
 
-    ws_msg->ws_spheres.push_back(wss);
+      ws_msg->ws_spheres.push_back(wss);
+    // }
+    // else{
+    //   RCLCPP_ERROR(rclcpp::get_logger("load_reachability_map"),
+    //   "No accepted");
+    // }
   }
 
     ws_msg->header.stamp = node->get_clock()->now();

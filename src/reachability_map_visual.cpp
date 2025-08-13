@@ -5,6 +5,7 @@
 
 #include <rviz_rendering/objects/arrow.hpp>
 #include <rviz_rendering/objects/shape.hpp>
+#include <rviz_rendering/objects/point_cloud.hpp>
 #include <rviz_common/display_context.hpp>
 // #include <rviz_common/display_factory.hpp>
 #include <rviz_common/factory/factory.hpp>
@@ -19,12 +20,20 @@
 
 namespace reachability_map_visualizer
 {
-ReachMapVisual::ReachMapVisual(Ogre::SceneManager* scene_manager, Ogre::SceneNode* parent_node,
+
+
+
+  ReachMapVisual::ReachMapVisual(Ogre::SceneManager* scene_manager, Ogre::SceneNode* parent_node,
                                rviz_common::DisplayContext* display_context)
 {
   scene_manager_ = scene_manager;
   frame_node_ = parent_node->createChildSceneNode();
+  point_cloud_visual_ = new rviz_rendering::PointCloud();
+  point_cloud_visual_->setRenderMode(rviz_rendering::PointCloud::RM_SPHERES);
+  point_cloud_visual_->setAlpha(0.60f);
+  point_cloud_visual_->setDimensions(0.02f, 0.02f, 0.02f);
 
+  frame_node_->attachObject(point_cloud_visual_);
   // arrow_.reset(new rviz::Arrow( scene_manager_, frame_node_ ));
 }
 
@@ -33,132 +42,131 @@ ReachMapVisual::~ReachMapVisual()
   scene_manager_->destroySceneNode(frame_node_);
 }
 
-void ReachMapVisual::setMessage(const reachability_map_visualizer::msg::WorkSpace::ConstPtr& msg, bool do_display_arrow,
-                                bool do_display_sphere, int low_ri, int high_ri, int shape_choice, int disect_choice)
+
+
+void ReachMapVisual::convertPointsToPointCloud(const reachability_map_visualizer::msg::WorkSpace& points, 
+                                                sensor_msgs::msg::PointCloud2& cloud, 
+                                                const std::string& frame_id) {
+
+  cloud.header.frame_id = frame_id;
+  cloud.height = 1;
+  cloud.width = points.ws_spheres.size();
+  cloud.is_dense = true;
+  cloud.is_bigendian = false;
+
+  // Define point fields
+  sensor_msgs::msg::PointField field_x;
+    // Set the field name (e.g., "x", "y", "z", or "intensity")
+    field_x.name = "x";
+    // Set the offset in bytes from the start of the point structure
+    field_x.offset = 0; // 'x' usually comes first
+    // Set the datatype (one of the constants from PointField)
+    field_x.datatype = sensor_msgs::msg::PointField::FLOAT32;
+    // Set the number of elements in the field
+    field_x.count = 1;
+
+    sensor_msgs::msg::PointField field_y;
+    field_y.name = "y";
+    field_y.offset = 4; 
+    field_y.datatype = sensor_msgs::msg::PointField::FLOAT32;
+    field_y.count = 1;
+
+    sensor_msgs::msg::PointField field_z;
+    field_z.name = "z";
+    field_z.offset = 8;
+    field_z.datatype = sensor_msgs::msg::PointField::FLOAT32;
+    field_z.count = 1;
+
+    sensor_msgs::msg::PointField field_rgb;
+    field_rgb.name = "rgb";
+    field_rgb.offset = 12; // 'x' usually comes first
+    field_rgb.datatype = sensor_msgs::msg::PointField::UINT32;
+    field_rgb.count = 1;
+
+  cloud.fields = {field_x, field_y, field_z, field_rgb};
+  cloud.point_step = sizeof(float) * 3  + sizeof(uint32_t); // Include RGB
+
+  // Fill point cloud data
+  std::vector<uint8_t> data(cloud.width * cloud.point_step);
+  uint8_t* ptr = data.data();
+  for (size_t i = 0; i < points.ws_spheres.size(); ++i) {
+    auto& point = points.ws_spheres[i];
+    *(reinterpret_cast<float*>(ptr)) = point.point.x;
+    *(reinterpret_cast<float*>(ptr + 4)) = point.point.y;
+    *(reinterpret_cast<float*>(ptr + 8)) = point.point.z;
+
+    // Set color based on intensity
+    uint8_t r, g, b;
+    if (point.ri *100 >= 90) {
+      r = 0; g = 0; b = 255;
+    } else if (point.ri*100 < 90 && point.ri*100 >= 50) {
+      r = 0; g = 255; b = 255;
+    } else if (point.ri*100 < 50 && point.ri*100 >= 30) {
+      r = 0; g = 255; b = 0;
+    } else if (point.ri *100 < 30 && point.ri*100 >= 5) {
+      r = 255; g = 255; b = 0;
+    } else {
+      r = 255; g = 0; b = 0;
+    }
+
+    *(reinterpret_cast<uint8_t*>(ptr + 12)) = r;
+    *(reinterpret_cast<uint8_t*>(ptr + 13)) = g;
+    *(reinterpret_cast<uint8_t*>(ptr + 14)) = b;
+
+    ptr += cloud.point_step;
+  }
+  cloud.data = std::move(data);
+}
+
+
+void ReachMapVisual::setMessage(const reachability_map_visualizer::msg::WorkSpace::ConstPtr& msg, bool do_display_arrow, bool do_display_sphere,
+                  int low_ri, int high_ri, int shape_choice, int disect_choice)
 {
-  int low_SphereSize, up_SphereSize;
-  // TODO: Not a very delicate process to dissect the workspace. Implement a way to provide a range and allow the user
-  // to select an axis and an upper/lower bound to slice with
-  switch (disect_choice)
+
+
+  point_cloud_visual_->clear();
+
+  std::vector<rviz_rendering::PointCloud::Point> points;
+  points.reserve(msg->ws_spheres.size()); // assuming your message has a vector called 'points'
+
+  for (const auto& point : msg->ws_spheres)
   {
-    case 0:
-    {
-      low_SphereSize = 0;
-      up_SphereSize = msg->ws_spheres.size();
-      break;
+    if (point.ri  < low_ri || point.ri  > high_ri){
+      continue;
     }
-    case 1:
+      rviz_rendering::PointCloud::Point pc;
+      pc.position = Ogre::Vector3(point.point.x, point.point.y, point.point.z);
+
+      // Convert your intensity -> RGB mapping
+      uint8_t r, g, b;
+    if (point.ri  >= 90)
     {
-      low_SphereSize = 0;
-      up_SphereSize = msg->ws_spheres.size() / 2;
-      break;
+      r = 0; g = 0; b = 255;
     }
-    case 2:
+    else if (point.ri  < 90 && point.ri  >= 50)
     {
-      low_SphereSize = msg->ws_spheres.size() / 2;
-      up_SphereSize = msg->ws_spheres.size();
-      break;
+       r = 0; g = 255; b = 255;
     }
-    case 3:
+    else if (point.ri < 50 && point.ri  >= 30)
     {
-      low_SphereSize = msg->ws_spheres.size() / 2.2;
-      up_SphereSize = msg->ws_spheres.size() / 1.8;
-      break;
+      r = 0; g = 255; b = 0;
     }
-    case 4:
+    else if (point.ri  < 30 && point.ri  >= 5)
     {
-      low_SphereSize = 0;
-      up_SphereSize = msg->ws_spheres.size() / 1.1;
-      break;
+      r = 255; g = 255; b = 0;
     }
+    else
+    {
+      r = 255; g = 0; b = 0;
+    }
+
+      pc.color = Ogre::ColourValue(r/255.0f, g/255.0f, b/255.0f);
+
+      points.push_back(pc);
   }
 
-  if (do_display_arrow)
-  {
-    std::shared_ptr< rviz_rendering::Arrow > pose_arrow;
-    for (size_t i = low_SphereSize; i < up_SphereSize; ++i)
-    {
-      for (size_t j = 0; j < msg->ws_spheres[i].poses.size(); ++j)
-      {
-        if (low_ri < int(msg->ws_spheres[i].ri) && int(msg->ws_spheres[i].ri) <= high_ri)
-        {
-          pose_arrow.reset(new rviz_rendering::Arrow(scene_manager_, frame_node_));
+  point_cloud_visual_->addPoints(points.begin(), points.end());
 
-          Ogre::Vector3 position_(msg->ws_spheres[i].poses[j].position.x, msg->ws_spheres[i].poses[j].position.y,
-                                  msg->ws_spheres[i].poses[j].position.z);
-          tf2::Quaternion quat(msg->ws_spheres[i].poses[j].orientation.x, msg->ws_spheres[i].poses[j].orientation.y,
-                               msg->ws_spheres[i].poses[j].orientation.z, msg->ws_spheres[i].poses[j].orientation.w);
-
-          tf2::Quaternion q2;
-          q2.setRPY(0, -M_PI / 2, 0);  // Arrows are pointed as -z direction. So rotating it is necessary
-
-          quat *= (q2);
-          quat.normalize();
-          Ogre::Quaternion orientation_(quat.w(), quat.x(), quat.y(), quat.z());
-
-          if (position_.isNaN() || orientation_.isNaN())
-          {
-            // RCLCPP_WARN(rclcpp::get_logger("ReachMapVisual"),"received invalid pose");
-            return;
-          }
-
-          pose_arrow->setPosition(position_);
-          pose_arrow->setOrientation(orientation_);
-
-          arrow_.push_back(pose_arrow);
-        }
-      }
-    }
-  }
-  if (do_display_sphere)
-  {
-    std::shared_ptr< rviz_rendering::Shape > sphere_center;
-    int colorRI;
-
-    for (size_t i = low_SphereSize; i < up_SphereSize; ++i)
-    {
-      if (low_ri <= int(msg->ws_spheres[i].ri) && int(msg->ws_spheres[i].ri <= high_ri))
-      {
-        switch (shape_choice)
-        {
-          case 0:
-          {
-            sphere_center.reset(new rviz_rendering::Shape(rviz_rendering::Shape::Sphere, scene_manager_, frame_node_));
-            break;
-          }
-          case 1:
-          {
-            sphere_center.reset(new rviz_rendering::Shape(rviz_rendering::Shape::Cylinder, scene_manager_, frame_node_));
-            break;
-          }
-          case 2:
-          {
-            sphere_center.reset(new rviz_rendering::Shape(rviz_rendering::Shape::Cone, scene_manager_, frame_node_));
-            break;
-          }
-          case 3:
-          {
-            sphere_center.reset(new rviz_rendering::Shape(rviz_rendering::Shape::Cube, scene_manager_, frame_node_));
-            break;
-          }
-        }
-
-        Ogre::Vector3 position_sphere(msg->ws_spheres[i].point.x, msg->ws_spheres[i].point.y, msg->ws_spheres[i].point.z);
-        Ogre::Quaternion orientation_sphere(0, 0, 0, 1);
-        colorRI = msg->ws_spheres[i].ri;
-        if (position_sphere.isNaN())
-        {
-          // RCLCPP_WARN(rclcpp::get_logger("ReachMapVisual"),"received invalid sphere coordinate");
-          return;
-        }
-        sphere_center->setPosition(position_sphere);
-        sphere_center->setOrientation(orientation_sphere);
-
-        sphere_.push_back(sphere_center);
-        colorRI_.push_back(colorRI);
-      }
-    }
-  }
 }
 
 void ReachMapVisual::setFramePosition(const Ogre::Vector3& position)

@@ -16,6 +16,8 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(visualization_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+
 
 find_package(Qt5 REQUIRED COMPONENTS Widgets)
 find_package(HDF5 REQUIRED)
@@ -71,6 +73,7 @@ ament_target_dependencies(reachability_map_plugin
         rclcpp
         std_msgs
         geometry_msgs
+        sensor_msgs
         rviz_common
         rviz_rendering
 )
@@ -105,6 +108,7 @@ ament_target_dependencies(load_reachability_voxel
         std_msgs
         visualization_msgs
         geometry_msgs
+        sensor_msgs
 )
 target_link_libraries(load_reachability_voxel
         hdf5_dataset
@@ -156,6 +160,7 @@ ament_export_dependencies(
         rviz_rendering
         HDF5
         MPI
+        sensor_msgs
 )
 
 ament_package()
