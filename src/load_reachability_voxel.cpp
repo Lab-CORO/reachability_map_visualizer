@@ -56,72 +56,72 @@ int main(int argc, char **argv)
   {
   if (index_map != previous_index_map){
 
-  // extract data to pose and ri
-  std::string h5_path; 
-  node->declare_parameter("h5_path", "/");
-  node->get_parameter("h5_path", h5_path);
-  hdf5_dataset::Hdf5Dataset h5(h5_path, index_map);
+    // extract data to pose and ri
+    std::string h5_path; 
+    node->declare_parameter("h5_path", "/");
+    node->get_parameter("h5_path", h5_path);
+    hdf5_dataset::Hdf5Dataset h5(h5_path, index_map);
 
-  h5.open();
+    h5.open();
     double resolution_ = h5.get_resolution(); 
-  double origine_offset = h5.get_origine_offset();
-  MapVecDouble sphere_col;
-  std::vector<std::array<double, 3>> voxels;
-  h5.h5ToSpheres(sphere_col, resolution_, origine_offset);
-  h5.h5ToCollision(voxels, resolution_, origine_offset);
- 
+    double origine_offset = h5.get_origine_offset();
+    MapVecDouble sphere_col;
+    std::vector<std::array<double, 3>> voxels;
+    h5.h5ToSpheres(sphere_col, resolution_, origine_offset);
+    h5.h5ToCollision(voxels, resolution_, origine_offset);
+  
+    std::string frame_id; 
+    node->declare_parameter("frame_id", "base_link");
+    node->get_parameter("frame_id", frame_id);
 
-  std::string frame_id; 
-  node->declare_parameter("frame_id", "base_link");
-  node->get_parameter("frame_id", frame_id);
+    // Create voxel grid msg
+    marker.header.stamp = node->get_clock()->now();
+    marker.header.frame_id = frame_id;
+    marker.id = index_map;
+    marker.type = 6; // Cube list
+    for (const auto& voxel : voxels)
+    {
+      geometry_msgs::msg::Point point;
+      point.x = voxel[0];
+      point.y = voxel[1];
+      point.z = voxel[2];
+      marker.points.push_back(point);
 
-  // Create voxel grid msg
-  marker.header.stamp = node->get_clock()->now();
-  marker.header.frame_id = frame_id;
-  marker.id = index_map;
-  marker.type = 6; // Cube list
-  for (const auto& voxel : voxels)
-  {
-    geometry_msgs::msg::Point point;
-    point.x = voxel[0];
-    point.y = voxel[1];
-    point.z = voxel[2];
-    marker.points.push_back(point);
-
-    std_msgs::msg::ColorRGBA color;
-    color.r = 1.0;
-    color.a = 0.50;
-    marker.colors.push_back(color);
-  }
-  marker.scale.x = resolution_;
-  marker.scale.y = resolution_;
-  marker.scale.z = resolution_;
-  // marker.color.r = .0;
+      std_msgs::msg::ColorRGBA color;
+      color.r = 1.0;
+      color.a = 0.50;
+      marker.colors.push_back(color);
+    }
+    marker.scale.x = resolution_;
+    marker.scale.y = resolution_;
+    marker.scale.z = resolution_;
 
 
 
-
-  ws_msg->header.stamp = node->get_clock()->now();
-
-  ws_msg->header.frame_id = frame_id;
-  ws_msg->resolution = resolution_;
-
-  for (const auto& sphere_pair : sphere_col)
-  { 
-      reachability_map_visualizer::msg::WsSphere wss;
-      wss.point.x = (sphere_pair.first)[0];
-      wss.point.y = (sphere_pair.first)[1];
-      wss.point.z = (sphere_pair.first)[2];
-      wss.ri = sphere_pair.second;
-
-      ws_msg->ws_spheres.push_back(wss);
 
     ws_msg->header.stamp = node->get_clock()->now();
-    previous_index_map = index_map;
-}
+
+    ws_msg->header.frame_id = frame_id;
+    ws_msg->resolution = resolution_;
+
+    for (const auto& sphere_pair : sphere_col)
+    { 
+        reachability_map_visualizer::msg::WsSphere wss;
+        wss.point.x = (sphere_pair.first)[0];
+        wss.point.y = (sphere_pair.first)[1];
+        wss.point.z = (sphere_pair.first)[2];
+        wss.ri = sphere_pair.second;
+
+        ws_msg->ws_spheres.push_back(wss);
+
+      ws_msg->header.stamp = node->get_clock()->now();
+      previous_index_map = index_map;
+    }
+  }
   // send msg
   publisher_voxel->publish(marker);
-    publisher->publish(*ws_msg);
+  publisher->publish(*ws_msg);
+  
 
     rclcpp::spin_some(node);
     loop_rate.sleep();

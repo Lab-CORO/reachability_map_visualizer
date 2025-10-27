@@ -4,9 +4,9 @@
 #ifndef Q_MOC_RUN
 
 #include <rviz_common/message_filter_display.hpp>
+#include <rviz_common/properties/ros_topic_property.hpp>
 #include "reachability_map_visualizer/msg/work_space.hpp"
 #endif
-#include "../../../../../../../opt/ros/jazzy/include/rviz_common/rviz_common/properties/ros_topic_property.hpp"
 
 // namespace Ogre
 // {
