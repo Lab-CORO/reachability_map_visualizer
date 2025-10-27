@@ -6,7 +6,7 @@
 #include <rviz_common/message_filter_display.hpp>
 #include "reachability_map_visualizer/msg/work_space.hpp"
 #endif
-#include "../../../../../../../opt/ros/humble/include/rviz_common/rviz_common/properties/ros_topic_property.hpp"
+#include "../../../../../../../opt/ros/jazzy/include/rviz_common/rviz_common/properties/ros_topic_property.hpp"
 
 // namespace Ogre
 // {
@@ -66,8 +66,8 @@ private:
   rviz_common::properties::ColorProperty* arrow_color_property_;
   rviz_common::properties::FloatProperty* arrow_alpha_property_;
   rviz_common::properties::FloatProperty* arrow_length_property_;
-  rviz_common::properties::FloatProperty* disect_max_;
-  rviz_common::properties::FloatProperty* disect_min_;
+  rviz_common::properties::IntProperty* hight_max_;
+  rviz_common::properties::IntProperty* hight_min_;
 
   rviz_common::properties::BoolProperty* do_display_sphere_;
   rviz_common::properties::ColorProperty* sphere_color_property_;

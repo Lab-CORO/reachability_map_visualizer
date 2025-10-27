@@ -120,7 +120,7 @@ void ReachMapVisual::convertPointsToPointCloud(const reachability_map_visualizer
 
 
 void ReachMapVisual::setMessage(const reachability_map_visualizer::msg::WorkSpace::ConstPtr& msg, bool do_display_arrow, bool do_display_sphere,
-                  int low_ri, int high_ri, float disect_max_, float disect_min_, int disect_choice)
+                  int low_ri, int high_ri, int disect_max_, int disect_min_, int disect_choice)
 {
 
 
@@ -135,16 +135,38 @@ void ReachMapVisual::setMessage(const reachability_map_visualizer::msg::WorkSpac
     if (point.ri  < low_ri || point.ri  > high_ri){
       continue;
     }
-    if (disect_choice == Disect::X && (point.point.x < disect_min_ || point.point.x > disect_max_)  ){
-      continue;
+
+  
+    if (disect_choice == Disect::X){
+      // convert index to position
+      float hight_min = disect_min_ * msg->resolution - msg->origine.x;
+      float hight_max = disect_max_ * msg->resolution - msg->origine.x;
+
+      if (point.point.x < hight_min || point.point.x > hight_max){
+        continue;
+      }
     }
 
-    if (disect_choice == Disect::Y && (point.point.y < disect_min_ || point.point.y > disect_max_)  ){
-      continue;
+    if (disect_choice == Disect::Y){
+      // convert index to position
+      float hight_min = disect_min_ * msg->resolution - msg->origine.y;
+      float hight_max = disect_max_ * msg->resolution - msg->origine.y;
+
+      if (point.point.y < hight_min || point.point.y > hight_max){
+        continue;
+      }
     }
-    if (disect_choice == Disect::Z && (point.point.z < disect_min_ || point.point.z > disect_max_)  ){
-      continue;
+
+    if (disect_choice == Disect::Z){
+      // convert index to position
+      float hight_min = disect_min_ * msg->resolution - msg->origine.z;
+      float hight_max = disect_max_ * msg->resolution - msg->origine.z;
+
+      if (point.point.z < hight_min || point.point.z > hight_max){
+        continue;
+      }
     }
+
       rviz_rendering::PointCloud::Point pc;
       pc.position = Ogre::Vector3(point.point.x, point.point.y, point.point.z);
 

@@ -45,9 +45,9 @@ ReachMapDisplay::ReachMapDisplay()
   disect_property_->addOption("Y", Disect::Y);
   disect_property_->addOption("Z", Disect::Z);
 
-  disect_max_  = new rviz_common::properties::FloatProperty("Max", 10, "meter",
+  hight_max_  = new rviz_common::properties::IntProperty("Max", 0, "index",
                                                   disect_category_, SLOT(updateColorAndAlphaArrow()), this);
-  disect_min_  = new rviz_common::properties::FloatProperty("Min", -10, "meter",
+  hight_min_  = new rviz_common::properties::IntProperty("Min", 0, "index",
                                                   disect_category_, SLOT(updateColorAndAlphaArrow()), this);
 
 
@@ -153,7 +153,7 @@ void ReachMapDisplay::processMessage(reachability_map_visualizer::msg::WorkSpace
 
   visual->setMessage(msg, do_display_arrow_->getBool(), do_display_sphere_->getBool(),
                      lower_bound_reachability_->getInt(), upper_bound_reachability_->getInt(),
-                     disect_max_->getFloat(), disect_min_->getFloat(), disect_property_->getOptionInt());
+                     hight_max_->getInt(), hight_min_->getInt(), disect_property_->getOptionInt());
 
   visual->setFramePosition(position);
   visual->setFrameOrientation(orientation);

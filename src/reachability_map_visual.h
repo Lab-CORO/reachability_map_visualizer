@@ -35,7 +35,7 @@ public:
   ReachMapVisual(Ogre::SceneManager* scene_manager, Ogre::SceneNode* parent_node, rviz_common::DisplayContext* display);
   virtual ~ReachMapVisual();
   void setMessage(const reachability_map_visualizer::msg::WorkSpace::ConstPtr& msg, bool do_display_arrow, bool do_display_sphere,
-                  int low_ri, int high_ri, float disect_max_, float disect_min_, int disect_choice);
+                  int low_ri, int high_ri, int hight_max, int hight_min, int disect_choice);
   void setFramePosition(const Ogre::Vector3& position);
   void setFrameOrientation(const Ogre::Quaternion& orientation);
 

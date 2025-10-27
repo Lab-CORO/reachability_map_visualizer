@@ -62,7 +62,7 @@ Hdf5Dataset::Hdf5Dataset(std::string path, std::string filename)
   checkFileName(this->filename_);
 }
 
-bool Hdf5Dataset::open()
+bool Hdf5Dataset::open() //TODO add hdf5 path to dataset 
 {
   std::string fullpath = this->path_;
   RCLCPP_INFO(rclcpp::get_logger("Hdf5Dataset"), "Opening map %s", fullpath.c_str());
@@ -98,7 +98,7 @@ bool Hdf5Dataset::open()
   hid_t attr_resolution = H5Aopen(this->reachability_map, "voxel_size", H5P_DEFAULT);
   if (attr_resolution < 0) {
       RCLCPP_ERROR(rclcpp::get_logger("Hdf5Dataset"), "Attribute 'voxel_size' not found");
-      return false;
+      // return false;
   }
   hid_t type_id = H5Aget_type(attr_resolution);
   if (H5Aread(attr_resolution, type_id, &this->res_ ) < 0) {
@@ -127,12 +127,8 @@ bool Hdf5Dataset::open()
 
 void Hdf5Dataset::close()
 {
-  // H5Aclose(this->attr_);
   H5Dclose(this->reachability_map);
   H5Dclose(this->voxel_grid);
-  // H5Gclose(this->group_poses_);
-  // H5Dclose(this->sphere_dataset_);
-  // H5Gclose(this->group_spheres_);
   H5Fclose(this->file_);
 }
 

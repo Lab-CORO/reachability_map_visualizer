@@ -17,7 +17,13 @@ using namespace std::chrono_literals;
 using namespace hdf5_dataset;
 
 static int index_map = 0;
-static    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr  publisher_voxel;
+static int previous_index_map = -1;
+static rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr  publisher_voxel;
+static visualization_msgs::msg::Marker marker;
+  // Create message RM
+auto ws_msg = std::make_shared<reachability_map_visualizer::msg::WorkSpace>();
+
+
 
 void next_callback(const std_msgs::msg::Int16::SharedPtr msg){
     // delete previous markers
@@ -35,12 +41,6 @@ int main(int argc, char **argv)
 {
   rclcpp::init(argc, argv);
 
-  if (argc < 2)
-  {
-    RCLCPP_ERROR(rclcpp::get_logger("load_reachability_map"),
-      "Please provide the name of the reachability map. If you have not created it yet, create it by running the appropriate launch file.");
-    return 1;
-  }
 
   auto node = rclcpp::Node::make_shared("workspace");
 
@@ -50,17 +50,17 @@ int main(int argc, char **argv)
             "/index", 10, next_callback );
 
 
-
-
-  // int index = 0;
-
   // Loop to publish
   rclcpp::Rate loop_rate(1);  // 0.2 Hz = every 5 seconds
   while (rclcpp::ok())
   {
+  if (index_map != previous_index_map){
 
   // extract data to pose and ri
-  hdf5_dataset::Hdf5Dataset h5(argv[1], index_map);
+  std::string h5_path; 
+  node->declare_parameter("h5_path", "/");
+  node->get_parameter("h5_path", h5_path);
+  hdf5_dataset::Hdf5Dataset h5(h5_path, index_map);
 
   h5.open();
     double resolution_ = h5.get_resolution(); 
@@ -71,12 +71,13 @@ int main(int argc, char **argv)
   h5.h5ToCollision(voxels, resolution_, origine_offset);
  
 
-
+  std::string frame_id; 
+  node->declare_parameter("frame_id", "base_link");
+  node->get_parameter("frame_id", frame_id);
 
   // Create voxel grid msg
-  visualization_msgs::msg::Marker marker;
   marker.header.stamp = node->get_clock()->now();
-  marker.header.frame_id = "base_link";
+  marker.header.frame_id = frame_id;
   marker.id = index_map;
   marker.type = 6; // Cube list
   for (const auto& voxel : voxels)
@@ -97,38 +98,31 @@ int main(int argc, char **argv)
   marker.scale.z = resolution_;
   // marker.color.r = .0;
 
-  // send msg
-  publisher_voxel->publish(marker);
 
-  // Create message RM
-  auto ws_msg = std::make_shared<reachability_map_visualizer::msg::WorkSpace>();
+
 
   ws_msg->header.stamp = node->get_clock()->now();
-  ws_msg->header.frame_id = "base_link";
+
+  ws_msg->header.frame_id = frame_id;
   ws_msg->resolution = resolution_;
 
   for (const auto& sphere_pair : sphere_col)
-  {
-    // if(sphere_pair.second >= 60){
-    
+  { 
       reachability_map_visualizer::msg::WsSphere wss;
       wss.point.x = (sphere_pair.first)[0];
       wss.point.y = (sphere_pair.first)[1];
       wss.point.z = (sphere_pair.first)[2];
       wss.ri = sphere_pair.second;
 
-
       ws_msg->ws_spheres.push_back(wss);
-    // }
-    // else{
-    //   RCLCPP_ERROR(rclcpp::get_logger("load_reachability_map"),
-    //   "No accepted");
-    // }
-  }
 
     ws_msg->header.stamp = node->get_clock()->now();
+    previous_index_map = index_map;
+}
+  // send msg
+  publisher_voxel->publish(marker);
     publisher->publish(*ws_msg);
-    // index = (index +1) % modulo;
+
     rclcpp::spin_some(node);
     loop_rate.sleep();
   }
