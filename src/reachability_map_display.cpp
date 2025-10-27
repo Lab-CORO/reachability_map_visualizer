@@ -9,6 +9,7 @@
 #include <rviz_common/properties/color_property.hpp>
 #include <rviz_common/properties/float_property.hpp>
 #include <rviz_common/properties/int_property.hpp>
+#include <rviz_common/properties/vector_property.hpp>
 #include <rviz_common/properties/enum_property.hpp>
 #include <rviz_common/frame_manager_iface.hpp>
 
@@ -24,6 +25,8 @@ ReachMapDisplay::ReachMapDisplay()
   do_display_sphere_ = new rviz_common::properties::BoolProperty("Show Shape", true, "Displays the spheres.", this);
   is_byReachability_ = new rviz_common::properties::BoolProperty("Color by Reachability", true, "Color transform by Reachability Index", this);
 
+
+
   shape_property_ = new rviz_common::properties::EnumProperty("Shape", "Sphere", "Shape to display the workspace.", this,
                                            SLOT(updateColorAndAlphaArrow()));
   shape_property_->addOption("Sphere", Sphere);
@@ -31,13 +34,23 @@ ReachMapDisplay::ReachMapDisplay()
   shape_property_->addOption("Cone", Cone);
   shape_property_->addOption("Cube", Cube);
 
+
+
+
+  disect_category_  = new rviz_common::properties::Property("Discret", QVariant(), "", this);
   disect_property_ =
-      new rviz_common::properties::EnumProperty("Disect", "Full", "Disection of the workspace", this, SLOT(updateColorAndAlphaArrow()));
-  disect_property_->addOption("Full", Full);
-  disect_property_->addOption("1st_Half", First_Half);
-  disect_property_->addOption("2nd_Half", Second_Half);
-  disect_property_->addOption("Middle_Slice", Middle_Slice);
-  disect_property_->addOption("End_Slice", End_Slice);
+      new rviz_common::properties::EnumProperty("Axis", "None", "Disection of the workspace", disect_category_, SLOT(updateColorAndAlphaArrow()), this);
+  disect_property_->addOption("None", Disect::None);
+  disect_property_->addOption("X", Disect::X);
+  disect_property_->addOption("Y", Disect::Y);
+  disect_property_->addOption("Z", Disect::Z);
+
+  hight_max_  = new rviz_common::properties::IntProperty("Max", 0, "index",
+                                                  disect_category_, SLOT(updateColorAndAlphaArrow()), this);
+  hight_min_  = new rviz_common::properties::IntProperty("Min", 0, "index",
+                                                  disect_category_, SLOT(updateColorAndAlphaArrow()), this);
+
+
 
   // Arrow Property category
   arrow_category_ = new rviz_common::properties::Property("Poses Property", QVariant(), "", this);
@@ -140,7 +153,7 @@ void ReachMapDisplay::processMessage(reachability_map_visualizer::msg::WorkSpace
 
   visual->setMessage(msg, do_display_arrow_->getBool(), do_display_sphere_->getBool(),
                      lower_bound_reachability_->getInt(), upper_bound_reachability_->getInt(),
-                     shape_property_->getOptionInt(), disect_property_->getOptionInt());
+                     hight_max_->getInt(), hight_min_->getInt(), disect_property_->getOptionInt());
 
   visual->setFramePosition(position);
   visual->setFrameOrientation(orientation);

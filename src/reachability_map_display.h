@@ -4,9 +4,9 @@
 #ifndef Q_MOC_RUN
 
 #include <rviz_common/message_filter_display.hpp>
+#include <rviz_common/properties/ros_topic_property.hpp>
 #include "reachability_map_visualizer/msg/work_space.hpp"
 #endif
-#include "../../../../../../../opt/ros/humble/include/rviz_common/rviz_common/properties/ros_topic_property.hpp"
 
 // namespace Ogre
 // {
@@ -37,14 +37,7 @@ public:
     Cube,
   };
 
-  enum Disect
-  {
-    Full,
-    First_Half,
-    Second_Half,
-    Middle_Slice,
-    End_Slice,
-  };
+
 
   ReachMapDisplay();
   virtual ~ReachMapDisplay();
@@ -65,12 +58,16 @@ private:
   // std::vector< boost::shared_ptr< ReachMapVisual > > visuals_;
   std::vector<std::shared_ptr<ReachMapVisual>> visuals_;
   rviz_common::properties::Property* arrow_category_;
+  rviz_common::properties::Property* disect_category_;
+  
   rviz_common::properties::Property* sphere_category_;
 
   rviz_common::properties::BoolProperty* do_display_arrow_;
   rviz_common::properties::ColorProperty* arrow_color_property_;
   rviz_common::properties::FloatProperty* arrow_alpha_property_;
   rviz_common::properties::FloatProperty* arrow_length_property_;
+  rviz_common::properties::IntProperty* hight_max_;
+  rviz_common::properties::IntProperty* hight_min_;
 
   rviz_common::properties::BoolProperty* do_display_sphere_;
   rviz_common::properties::ColorProperty* sphere_color_property_;
