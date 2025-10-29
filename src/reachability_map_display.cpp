@@ -81,6 +81,9 @@ ReachMapDisplay::ReachMapDisplay()
 
   upper_bound_reachability_ =
       new rviz_common::properties::IntProperty("Highest Reachability Index", 100, "Highest Reachability index.", this);
+
+  use_intensity_coloring_ = new rviz_common::properties::BoolProperty("Use Jet Colormap", true,
+      "Use jet colormap gradient (blue->cyan->green->yellow->red) instead of categorical RGB colors", this);
 }
 
 void ReachMapDisplay::onInitialize()
@@ -153,7 +156,8 @@ void ReachMapDisplay::processMessage(reachability_map_visualizer::msg::WorkSpace
 
   visual->setMessage(msg, do_display_arrow_->getBool(), do_display_sphere_->getBool(),
                      lower_bound_reachability_->getInt(), upper_bound_reachability_->getInt(),
-                     hight_max_->getInt(), hight_min_->getInt(), disect_property_->getOptionInt());
+                     hight_max_->getInt(), hight_min_->getInt(), disect_property_->getOptionInt(),
+                     use_intensity_coloring_->getBool());
 
   visual->setFramePosition(position);
   visual->setFrameOrientation(orientation);

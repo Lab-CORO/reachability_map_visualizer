@@ -77,6 +77,7 @@ private:
   rviz_common::properties::IntProperty* lower_bound_reachability_;
   rviz_common::properties::IntProperty* upper_bound_reachability_;
   rviz_common::properties::BoolProperty* is_byReachability_;
+  rviz_common::properties::BoolProperty* use_intensity_coloring_;
   rviz_common::properties::EnumProperty* shape_property_;
   rviz_common::properties::EnumProperty* disect_property_;
 };

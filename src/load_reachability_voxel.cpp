@@ -118,6 +118,7 @@ int main(int argc, char **argv)
 
     ws_msg->header.stamp = node->get_clock()->now();
     previous_index_map = index_map;
+  }
 }
   // send msg
   publisher_voxel->publish(marker);
