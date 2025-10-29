@@ -164,8 +164,8 @@ void ReachMapVisual::convertPointsToPointCloud(const reachability_map_visualizer
 }
 
 
-void ReachMapVisual::setMessage(const reachability_map_visualizer::msg::WorkSpace::ConstPtr& msg, bool do_display_arrow, bool do_display_sphere,
-                  int low_ri, int high_ri, int disect_max_, int disect_min_, int disect_choice, bool use_intensity_coloring)
+void ReachMapVisual::setMessage(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg, bool do_display_arrow, bool do_display_sphere,
+                  int low_ri, int high_ri, int disect_max_, int disect_min_, int disect_choice)
 {
 
 
