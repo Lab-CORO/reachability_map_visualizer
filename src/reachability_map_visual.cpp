@@ -165,20 +165,12 @@ void ReachMapVisual::convertPointsToPointCloud(const reachability_map_visualizer
 
 
 void ReachMapVisual::setMessage(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg, bool do_display_arrow, bool do_display_sphere,
-                  int low_ri, int high_ri, int disect_max_, int disect_min_, int disect_choice)
+                  int low_ri, int high_ri, int disect_max_, int disect_min_, int disect_choice, bool use_intensity_coloring)
 {
 
 
   point_cloud_visual_->clear();
   point_cloud_visual_->setDimensions(msg->resolution, msg->resolution, msg->resolution);
-
-  // Configure coloring based on mode
-  if (use_intensity_coloring) {
-    // Use intensity channel - RViz will apply color map (like jet)
-    // This allows users to choose color scheme in RViz (Flat Color, Intensity, etc.)
-  } else {
-    // Use RGB coloring - direct color specification
-  }
 
   std::vector<rviz_rendering::PointCloud::Point> points;
   points.reserve(msg->ws_spheres.size()); // assuming your message has a vector called 'points'
