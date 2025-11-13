@@ -7,6 +7,17 @@ project(reachability_map_visualizer)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_AUTOMOC ON)
 
+# Optimisations de compilation pour performance maximale
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native -ffast-math")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ftree-vectorize -fopt-info-vec-optimized")
+
+# OpenMP pour parallélisation multi-threading
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    message(STATUS "OpenMP found - enabling parallel processing")
+endif()
+
 # Set CMake policy for Python finder modules
 if(POLICY CMP0148)
   cmake_policy(SET CMP0148 OLD)
@@ -137,6 +148,12 @@ install(
 install(
         FILES plugin_description.xml
         DESTINATION share/${PROJECT_NAME}
+)
+
+# Install shader files (for future GPU compute implementation)
+install(
+        DIRECTORY shaders/
+        DESTINATION share/${PROJECT_NAME}/shaders
 )
 
 # Install launch files (commented out - launch directory doesn't exist)

@@ -81,7 +81,14 @@ private:
   void initializeFixedGrid(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg);
   void updateGridColors(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg,
                         int low_ri, int high_ri, int disect_max, int disect_min, int disect_choice);
+  void updateGridColorsOptimized(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg,
+                                 int low_ri, int high_ri, int disect_max, int disect_min, int disect_choice);
   inline Ogre::ColourValue getColorForRI(float ri) const;
+
+  // Lookup table pour couleurs (précomputation)
+  static constexpr int COLOR_LUT_SIZE = 101;
+  std::array<Ogre::ColourValue, COLOR_LUT_SIZE> color_lut_;
+  void initializeColorLUT();
 
 };
 }  // end namespace reachability_map_visualizer

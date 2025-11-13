@@ -38,6 +38,9 @@ namespace reachability_map_visualizer
   // Initialisation optimisation grille fixe
   grid_initialized_ = false;
 
+  // Initialiser la lookup table des couleurs
+  initializeColorLUT();
+
   // arrow_.reset(new rviz::Arrow( scene_manager_, frame_node_ ));
 }
 
@@ -97,6 +100,104 @@ void ReachMapVisual::initializeFixedGrid(const std::shared_ptr<const reachabilit
   }
 
   grid_initialized_ = true;
+}
+
+// Initialiser la lookup table des couleurs pour accès O(1)
+void ReachMapVisual::initializeColorLUT() {
+  for (int ri = 0; ri <= 100; ++ri) {
+    if (ri >= 90) {
+      color_lut_[ri] = Ogre::ColourValue(0.0f, 0.0f, 1.0f, 1.0f);  // Bleu
+    } else if (ri >= 50) {
+      color_lut_[ri] = Ogre::ColourValue(0.0f, 1.0f, 1.0f, 1.0f);  // Cyan
+    } else if (ri >= 30) {
+      color_lut_[ri] = Ogre::ColourValue(0.0f, 1.0f, 0.0f, 1.0f);  // Vert
+    } else if (ri >= 5) {
+      color_lut_[ri] = Ogre::ColourValue(1.0f, 1.0f, 0.0f, 1.0f);  // Jaune
+    } else {
+      color_lut_[ri] = Ogre::ColourValue(1.0f, 0.0f, 0.0f, 1.0f);  // Rouge
+    }
+  }
+}
+
+// Version ultra-optimisée avec OpenMP et vectorisation
+void ReachMapVisual::updateGridColorsOptimized(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg,
+                                               int low_ri, int high_ri, int disect_max, int disect_min, int disect_choice)
+{
+  // Vérifier que la grille a été initialisée et que les tailles correspondent
+  if (!grid_initialized_ || msg->ws_spheres.size() != point_buffer_.size()) {
+    return;
+  }
+
+  const size_t num_voxels = msg->ws_spheres.size();
+
+  // Précalculer les limites de dissection (hors de la boucle parallèle)
+  float hight_min = 0.0f, hight_max = 0.0f;
+  const bool check_dissection = (disect_choice != Disect::None);
+
+  if (check_dissection) {
+    switch (disect_choice) {
+      case Disect::X:
+        hight_min = disect_min * msg->resolution - msg->origine.x;
+        hight_max = disect_max * msg->resolution - msg->origine.x;
+        break;
+      case Disect::Y:
+        hight_min = disect_min * msg->resolution - msg->origine.y;
+        hight_max = disect_max * msg->resolution - msg->origine.y;
+        break;
+      case Disect::Z:
+        hight_min = disect_min * msg->resolution - msg->origine.z;
+        hight_max = disect_max * msg->resolution - msg->origine.z;
+        break;
+      default:
+        break;
+    }
+  }
+
+  // Pointeur direct vers les données pour éviter indirections
+  const auto& spheres = msg->ws_spheres;
+  auto& points = point_buffer_;
+
+  // Boucle parallélisée avec OpenMP
+  // pragma omp parallel for si disponible, sinon boucle normale
+  #ifdef _OPENMP
+  #pragma omp parallel for schedule(static) if(num_voxels > 1000)
+  #endif
+  for (size_t i = 0; i < num_voxels; ++i) {
+    const auto& voxel = spheres[i];
+    auto& point = points[i];
+
+    // Filtrage par RI (branches prédictibles pour le compilateur)
+    if (voxel.ri < low_ri || voxel.ri > high_ri) {
+      point.color.a = 0.0f;  // Invisible
+      continue;
+    }
+
+    // Filtrage par dissection
+    if (check_dissection) {
+      float value_to_check;
+
+      // Éviter le switch dans la boucle chaude
+      if (disect_choice == Disect::X) {
+        value_to_check = voxel.point.x;
+      } else if (disect_choice == Disect::Y) {
+        value_to_check = voxel.point.y;
+      } else { // Disect::Z
+        value_to_check = voxel.point.z;
+      }
+
+      if (value_to_check < hight_min || value_to_check > hight_max) {
+        point.color.a = 0.0f;  // Invisible
+        continue;
+      }
+    }
+
+    // Voxel visible : lookup table au lieu de if/else
+    const int ri_index = static_cast<int>(voxel.ri);
+    const int clamped_ri = (ri_index < 0) ? 0 : (ri_index > 100 ? 100 : ri_index);
+
+    const auto& color = color_lut_[clamped_ri];
+    point.color = color;  // Copie vectorisée par le compilateur
+  }
 }
 
 // Met à jour uniquement les couleurs et alpha selon les filtres
@@ -259,7 +360,8 @@ void ReachMapVisual::setMessage(const std::shared_ptr<const reachability_map_vis
   }
 
   // Étape 2 : Mettre à jour uniquement les couleurs et alpha selon les filtres
-  updateGridColors(msg, low_ri, high_ri, disect_max_, disect_min_, disect_choice);
+  // Utiliser la version optimisée avec OpenMP + vectorisation
+  updateGridColorsOptimized(msg, low_ri, high_ri, disect_max_, disect_min_, disect_choice);
 
   // Étape 3 : Envoyer le buffer au GPU (clear + addPoints, mais le buffer est réutilisé)
   point_cloud_visual_->clear();
