@@ -68,6 +68,21 @@ private:
 
   rviz_rendering::PointCloud* point_cloud_visual_;
 
+  // Optimisation: grille fixe pour mise à jour rapide
+  std::vector<rviz_rendering::PointCloud::Point> point_buffer_;
+  bool grid_initialized_;
+
+  // Cache pour les paramètres de la grille
+  int cached_size_x_, cached_size_y_, cached_size_z_;
+  float cached_resolution_;
+  geometry_msgs::msg::Point cached_origin_;
+
+  // Helpers
+  void initializeFixedGrid(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg);
+  void updateGridColors(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg,
+                        int low_ri, int high_ri, int disect_max, int disect_min, int disect_choice);
+  inline Ogre::ColourValue getColorForRI(float ri) const;
+
 };
 }  // end namespace reachability_map_visualizer
 #endif  // ReachMap_VISUAL_H

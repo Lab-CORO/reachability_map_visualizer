@@ -147,9 +147,17 @@ void ReachMapDisplay::processMessage(reachability_map_visualizer::msg::WorkSpace
     //           qPrintable(fixed_frame_));
     return;
   }
+
+  // OPTIMISATION : Réutiliser le visual existant au lieu de le détruire/recréer
   std::shared_ptr< ReachMapVisual > visual;
-  visuals_.clear();
-  visual.reset(new ReachMapVisual(context_->getSceneManager(), scene_node_, context_));
+  if (visuals_.empty()) {
+    // Créer le visual seulement la première fois
+    visual.reset(new ReachMapVisual(context_->getSceneManager(), scene_node_, context_));
+    visuals_.push_back(visual);
+  } else {
+    // Réutiliser le visual existant
+    visual = visuals_[0];
+  }
 
   visual->setMessage(msg, do_display_arrow_->getBool(), do_display_sphere_->getBool(),
                      lower_bound_reachability_->getInt(), upper_bound_reachability_->getInt(),
@@ -173,7 +181,6 @@ void ReachMapDisplay::processMessage(reachability_map_visualizer::msg::WorkSpace
     visual->setColorSpherebyRI(sphere_alpha);
   }
 
-  visuals_.push_back(visual);
   //updateArrowSize();
   updateSphereSize();
 

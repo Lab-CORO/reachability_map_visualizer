@@ -34,6 +34,10 @@ namespace reachability_map_visualizer
   point_cloud_visual_->setDimensions(0.02f, 0.02f, 0.02f);
 
   frame_node_->attachObject(point_cloud_visual_);
+
+  // Initialisation optimisation grille fixe
+  grid_initialized_ = false;
+
   // arrow_.reset(new rviz::Arrow( scene_manager_, frame_node_ ));
 }
 
@@ -43,6 +47,133 @@ ReachMapVisual::~ReachMapVisual()
 }
 
 
+
+// Fonction helper inline pour calculer la couleur selon le RI
+inline Ogre::ColourValue ReachMapVisual::getColorForRI(float ri) const
+{
+  if (ri >= 90.0f) {
+    return Ogre::ColourValue(0.0f, 0.0f, 1.0f);  // Bleu
+  } else if (ri >= 50.0f) {
+    return Ogre::ColourValue(0.0f, 1.0f, 1.0f);  // Cyan
+  } else if (ri >= 30.0f) {
+    return Ogre::ColourValue(0.0f, 1.0f, 0.0f);  // Vert
+  } else if (ri >= 5.0f) {
+    return Ogre::ColourValue(1.0f, 1.0f, 0.0f);  // Jaune
+  } else {
+    return Ogre::ColourValue(1.0f, 0.0f, 0.0f);  // Rouge
+  }
+}
+
+// Initialise la grille fixe avec toutes les positions des voxels
+void ReachMapVisual::initializeFixedGrid(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg)
+{
+  // Vérifier si la grille a changé de taille
+  if (grid_initialized_ &&
+      msg->ws_spheres.size() == point_buffer_.size() &&
+      msg->resolution == cached_resolution_ &&
+      msg->origine.x == cached_origin_.x &&
+      msg->origine.y == cached_origin_.y &&
+      msg->origine.z == cached_origin_.z) {
+    // Grille déjà initialisée avec les bons paramètres
+    return;
+  }
+
+  // Sauvegarder les paramètres de la grille
+  cached_resolution_ = msg->resolution;
+  cached_origin_ = msg->origine;
+
+  // Pré-allouer le buffer avec la taille exacte
+  point_buffer_.clear();
+  point_buffer_.reserve(msg->ws_spheres.size());
+
+  // Créer tous les points avec leurs positions fixes
+  for (size_t i = 0; i < msg->ws_spheres.size(); ++i) {
+    rviz_rendering::PointCloud::Point pt;
+    pt.position.x = msg->ws_spheres[i].point.x;
+    pt.position.y = msg->ws_spheres[i].point.y;
+    pt.position.z = msg->ws_spheres[i].point.z;
+    pt.color = Ogre::ColourValue(1.0f, 0.0f, 0.0f, 0.0f);  // Couleur par défaut, alpha = 0 (invisible)
+    point_buffer_.push_back(pt);
+  }
+
+  grid_initialized_ = true;
+}
+
+// Met à jour uniquement les couleurs et alpha selon les filtres
+void ReachMapVisual::updateGridColors(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg,
+                                      int low_ri, int high_ri, int disect_max, int disect_min, int disect_choice)
+{
+  // Vérifier que la grille a été initialisée et que les tailles correspondent
+  if (!grid_initialized_ || msg->ws_spheres.size() != point_buffer_.size()) {
+    return;
+  }
+
+  // Précalculer les limites de dissection pour éviter les calculs répétés
+  float hight_min = 0.0f, hight_max = 0.0f;
+  bool check_dissection = (disect_choice != Disect::None);
+
+  if (check_dissection) {
+    switch (disect_choice) {
+      case Disect::X:
+        hight_min = disect_min * msg->resolution - msg->origine.x;
+        hight_max = disect_max * msg->resolution - msg->origine.x;
+        break;
+      case Disect::Y:
+        hight_min = disect_min * msg->resolution - msg->origine.y;
+        hight_max = disect_max * msg->resolution - msg->origine.y;
+        break;
+      case Disect::Z:
+        hight_min = disect_min * msg->resolution - msg->origine.z;
+        hight_max = disect_max * msg->resolution - msg->origine.z;
+        break;
+      default:
+        check_dissection = false;
+        break;
+    }
+  }
+
+  // Parcourir tous les voxels et mettre à jour couleur + alpha
+  for (size_t i = 0; i < msg->ws_spheres.size(); ++i) {
+    const auto& voxel = msg->ws_spheres[i];
+    auto& point = point_buffer_[i];
+
+    // Filtrage par RI
+    if (voxel.ri < low_ri || voxel.ri > high_ri) {
+      point.color.a = 0.0f;  // Invisible
+      continue;
+    }
+
+    // Filtrage par dissection
+    if (check_dissection) {
+      float value_to_check = 0.0f;
+      switch (disect_choice) {
+        case Disect::X:
+          value_to_check = voxel.point.x;
+          break;
+        case Disect::Y:
+          value_to_check = voxel.point.y;
+          break;
+        case Disect::Z:
+          value_to_check = voxel.point.z;
+          break;
+        default:
+          break;
+      }
+
+      if (value_to_check < hight_min || value_to_check > hight_max) {
+        point.color.a = 0.0f;  // Invisible
+        continue;
+      }
+    }
+
+    // Voxel visible : mettre à jour la couleur selon RI et alpha = 1
+    Ogre::ColourValue color = getColorForRI(voxel.ri);
+    point.color.r = color.r;
+    point.color.g = color.g;
+    point.color.b = color.b;
+    point.color.a = 1.0f;  // Visible
+  }
+}
 
 void ReachMapVisual::convertPointsToPointCloud(const reachability_map_visualizer::msg::WorkSpace& points, 
                                                 sensor_msgs::msg::PointCloud2& cloud, 
@@ -122,84 +253,18 @@ void ReachMapVisual::convertPointsToPointCloud(const reachability_map_visualizer
 void ReachMapVisual::setMessage(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg, bool do_display_arrow, bool do_display_sphere,
                   int low_ri, int high_ri, int disect_max_, int disect_min_, int disect_choice)
 {
-
-
-  point_cloud_visual_->clear();
-  point_cloud_visual_->setDimensions(msg->resolution, msg->resolution, msg->resolution);
-
-  std::vector<rviz_rendering::PointCloud::Point> points;
-  points.reserve(msg->ws_spheres.size()); // assuming your message has a vector called 'points'
-
-  for (const auto& point : msg->ws_spheres)
-  {
-    if (point.ri  < low_ri || point.ri  > high_ri){
-      continue;
-    }
-
-  
-    if (disect_choice == Disect::X){
-      // convert index to position
-      float hight_min = disect_min_ * msg->resolution - msg->origine.x;
-      float hight_max = disect_max_ * msg->resolution - msg->origine.x;
-
-      if (point.point.x < hight_min || point.point.x > hight_max){
-        continue;
-      }
-    }
-
-    if (disect_choice == Disect::Y){
-      // convert index to position
-      float hight_min = disect_min_ * msg->resolution - msg->origine.y;
-      float hight_max = disect_max_ * msg->resolution - msg->origine.y;
-
-      if (point.point.y < hight_min || point.point.y > hight_max){
-        continue;
-      }
-    }
-
-    if (disect_choice == Disect::Z){
-      // convert index to position
-      float hight_min = disect_min_ * msg->resolution - msg->origine.z;
-      float hight_max = disect_max_ * msg->resolution - msg->origine.z;
-
-      if (point.point.z < hight_min || point.point.z > hight_max){
-        continue;
-      }
-    }
-
-      rviz_rendering::PointCloud::Point pc;
-      pc.position = Ogre::Vector3(point.point.x, point.point.y, point.point.z);
-
-      // Convert your intensity -> RGB mapping
-      uint8_t r, g, b;
-    if (point.ri  >= 90)
-    {
-      r = 0; g = 0; b = 255;
-    }
-    else if (point.ri  < 90 && point.ri  >= 50)
-    {
-       r = 0; g = 255; b = 255;
-    }
-    else if (point.ri < 50 && point.ri  >= 30)
-    {
-      r = 0; g = 255; b = 0;
-    }
-    else if (point.ri  < 30 && point.ri  >= 5)
-    {
-      r = 255; g = 255; b = 0;
-    }
-    else
-    {
-      r = 255; g = 0; b = 0;
-    }
-
-      pc.color = Ogre::ColourValue(r/255.0f, g/255.0f, b/255.0f);
-
-      points.push_back(pc);
+  // Étape 1 : Initialiser la grille fixe au premier message ou si les paramètres changent
+  if (!grid_initialized_ || msg->ws_spheres.size() != point_buffer_.size()) {
+    initializeFixedGrid(msg);
   }
 
-  point_cloud_visual_->addPoints(points.begin(), points.end());
+  // Étape 2 : Mettre à jour uniquement les couleurs et alpha selon les filtres
+  updateGridColors(msg, low_ri, high_ri, disect_max_, disect_min_, disect_choice);
 
+  // Étape 3 : Envoyer le buffer au GPU (clear + addPoints, mais le buffer est réutilisé)
+  point_cloud_visual_->clear();
+  point_cloud_visual_->setDimensions(msg->resolution, msg->resolution, msg->resolution);
+  point_cloud_visual_->addPoints(point_buffer_.begin(), point_buffer_.end());
 }
 
 void ReachMapVisual::setFramePosition(const Ogre::Vector3& position)
