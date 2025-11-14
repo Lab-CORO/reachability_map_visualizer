@@ -27,6 +27,7 @@ endif()
 # Dependencies
 # ------------------------------------------------------------------------------
 find_package(ament_cmake REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -98,6 +99,7 @@ add_library(reachability_map_plugin SHARED
 )
 ament_target_dependencies(reachability_map_plugin
         rclcpp
+        ament_index_cpp
         std_msgs
         geometry_msgs
         sensor_msgs
@@ -189,6 +191,7 @@ ament_export_include_directories(include)
 ament_export_libraries(reachability_map_plugin)
 ament_export_dependencies(
         rclcpp
+        ament_index_cpp
         std_msgs
         geometry_msgs
         rviz_common

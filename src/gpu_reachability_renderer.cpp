@@ -3,6 +3,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <cstring>
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 // OpenGL headers
 #ifdef __APPLE__
@@ -171,8 +172,15 @@ void GPUReachabilityRenderer::initializeGL() {
 }
 
 std::string GPUReachabilityRenderer::loadShaderFile(const std::string& filename) {
-    // Try to find shader file in package share directory
-    std::string shader_path = "/home/user/reachability_map_visualizer/shaders/" + filename;
+    // Find shader file in package share directory using ament_index
+    std::string package_share_dir;
+    try {
+        package_share_dir = ament_index_cpp::get_package_share_directory("reachability_map_visualizer");
+    } catch (const std::exception& e) {
+        throw std::runtime_error("Failed to find package share directory: " + std::string(e.what()));
+    }
+
+    std::string shader_path = package_share_dir + "/shaders/" + filename;
 
     std::ifstream file(shader_path);
     if (!file.is_open()) {
