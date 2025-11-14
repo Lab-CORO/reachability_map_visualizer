@@ -57,17 +57,17 @@ int main(int argc, char **argv)
   if (index_map != previous_index_map){
 
     // extract data to pose and ri
-    std::string h5_path; 
+    std::string h5_path;
     node->declare_parameter("h5_path", "/");
     node->get_parameter("h5_path", h5_path);
     hdf5_dataset::Hdf5Dataset h5(h5_path, index_map);
 
     h5.open();
-    double resolution_ = h5.get_resolution(); 
+    double resolution_ = h5.get_resolution();
     double origine_offset = h5.get_origine_offset();
-    MapVecDouble sphere_col;
+
+    // OPTIMIZED: Direct HDF5 reading for collision voxels (legacy)
     std::vector<std::array<double, 3>> voxels;
-    h5.h5ToSpheres(sphere_col, resolution_, origine_offset);
     h5.h5ToCollision(voxels, resolution_, origine_offset);
   
     std::string frame_id; 
@@ -121,29 +121,14 @@ int main(int argc, char **argv)
     ws_msg->origine.y = origine_y;
     ws_msg->origine.z = origine_z;
 
-    // OPTIMISATION: Créer un array dense de RI (grille complète)
-    size_t total_voxels = size_x * size_y * size_z;
-    ws_msg->ri_values.resize(total_voxels, 0.0f);  // Initialiser à 0
-
-    RCLCPP_INFO(node->get_logger(), "Creating dense RI array: %dx%dx%d = %zu voxels",
-                size_x, size_y, size_z, total_voxels);
-
-    // Remplir l'array avec les valeurs RI depuis sphere_col
-    for (const auto& sphere_pair : sphere_col) {
-      // Convertir position mondiale → indices de grille
-      int ix = static_cast<int>(std::round((sphere_pair.first[0] - origine_x) / resolution_));
-      int iy = static_cast<int>(std::round((sphere_pair.first[1] - origine_y) / resolution_));
-      int iz = static_cast<int>(std::round((sphere_pair.first[2] - origine_z) / resolution_));
-
-      // Vérifier les bounds
-      if (ix >= 0 && ix < size_x && iy >= 0 && iy < size_y && iz >= 0 && iz < size_z) {
-        // Index flat: x * size_y * size_z + y * size_z + z
-        size_t index = ix * size_y * size_z + iy * size_z + iz;
-        ws_msg->ri_values[index] = sphere_pair.second;
-      }
+    // OPTIMIZED: Direct HDF5 → dense RI array (zero-copy + vectorized)
+    if (!h5.h5ToRIArray(ws_msg->ri_values)) {
+      RCLCPP_ERROR(node->get_logger(), "Failed to read RI array from HDF5");
+      continue;
     }
 
-    RCLCPP_INFO(node->get_logger(), "Filled %zu non-zero voxels in dense array", sphere_col.size());
+    RCLCPP_INFO(node->get_logger(), "Loaded RI array: %dx%dx%d = %zu voxels",
+                size_x, size_y, size_z, ws_msg->ri_values.size());
 
     // Legacy: garder ws_spheres pour compatibilité (optionnel, peut être retiré)
     // Commenté pour économiser bande passante - décommenter si besoin

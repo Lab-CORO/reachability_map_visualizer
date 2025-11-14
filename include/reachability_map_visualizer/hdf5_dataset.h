@@ -37,6 +37,10 @@ public:
 
   bool h5ToSpheres(MapVecDouble& sphere_col, double resolution, double origine_offset);
   bool h5ToCollision(std::vector<std::array<double, 3>> & obstacles, double resolution, double origine_offset);
+
+  // OPTIMIZED: Direct HDF5 → RI array (zero-copy + vectorized)
+  bool h5ToRIArray(std::vector<float>& ri_array);
+
   double get_resolution();
   double get_origine_offset();
 

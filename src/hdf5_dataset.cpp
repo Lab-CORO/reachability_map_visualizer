@@ -343,7 +343,73 @@ bool Hdf5Dataset::h5ToCollision(std::vector<std::array<double, 3>> & obstacles, 
   }
 
   RCLCPP_INFO(rclcpp::get_logger("load_reachability_map"), "Map generation complete.");
-  return true;  
+  return true;
+}
+
+bool Hdf5Dataset::h5ToRIArray(std::vector<float>& ri_array)
+{
+  RCLCPP_INFO(rclcpp::get_logger("load_reachability_map"), "Direct HDF5 → RI array (optimized)...");
+
+  if (this->reachability_map < 0) {
+    RCLCPP_ERROR(rclcpp::get_logger("load_reachability_map"), "Invalid dataset handle.");
+    return false;
+  }
+
+  hid_t dataset = this->reachability_map;
+  hid_t dataspace = H5Dget_space(dataset);
+
+  int ndims = H5Sget_simple_extent_ndims(dataspace);
+  if (ndims != 3 && ndims != 4) {
+    RCLCPP_ERROR(rclcpp::get_logger("load_reachability_map"), "Expected a 3D or 4D dataset, got %dD.", ndims);
+    H5Sclose(dataspace);
+    return false;
+  }
+
+  hsize_t dims[4] = {1, 0, 0, 0};
+  H5Sget_simple_extent_dims(dataspace, dims, NULL);
+
+  size_t d0 = (ndims == 4) ? dims[0] : 1;
+  size_t d1 = (ndims == 4) ? dims[1] : dims[0];
+  size_t d2 = (ndims == 4) ? dims[2] : dims[1];
+  size_t d3 = (ndims == 4) ? dims[3] : dims[2];
+
+  size_t total_size = d1 * d2 * d3;
+
+  // Allouer le vector cible (zéro copie - lecture directe)
+  ri_array.resize(total_size);
+
+  // Lire directement depuis HDF5 dans le vector
+  hsize_t mem_dims[3] = {d1, d2, d3};
+  hid_t memspace = H5Screate_simple(3, mem_dims, NULL);
+
+  if (ndims == 4) {
+    // Lire seulement la première tranche si 4D
+    hsize_t offset[4] = {0, 0, 0, 0};
+    hsize_t count[4]  = {1, d1, d2, d3};
+    H5Sselect_hyperslab(dataspace, H5S_SELECT_SET, offset, NULL, count, NULL);
+  }
+
+  herr_t status = H5Dread(dataset, H5T_NATIVE_FLOAT, memspace, dataspace, H5P_DEFAULT, ri_array.data());
+  H5Sclose(dataspace);
+  H5Sclose(memspace);
+
+  if (status < 0) {
+    RCLCPP_ERROR(rclcpp::get_logger("load_reachability_map"), "Failed to read HDF5 dataset.");
+    return false;
+  }
+
+  // Multiplication vectorisée par 100.0f (OpenMP SIMD)
+  #ifdef _OPENMP
+  #pragma omp simd
+  #endif
+  for (size_t i = 0; i < total_size; ++i) {
+    ri_array[i] *= 100.0f;
+  }
+
+  RCLCPP_INFO(rclcpp::get_logger("load_reachability_map"),
+              "Direct read complete: %zu voxels (grid %zux%zux%zu)",
+              total_size, d1, d2, d3);
+  return true;
 }
 
 double Hdf5Dataset::get_resolution(){
