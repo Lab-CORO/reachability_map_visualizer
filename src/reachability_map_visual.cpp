@@ -17,6 +17,11 @@
 
 #include "reachability_map_visual.h"
 #include <iterator>
+#include <atomic>
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 namespace reachability_map_visualizer
 {
@@ -35,8 +40,16 @@ namespace reachability_map_visualizer
 
   frame_node_->attachObject(point_cloud_visual_);
 
-  // Initialisation optimisation grille fixe
+  // Initialisation optimisation grille fixe + sparse grid
   grid_initialized_ = false;
+  use_sparse_grid_ = true;  // Par défaut: mode sparse (efficace pour grandes grilles)
+
+  // Initialiser cache filtres (valeurs impossibles pour forcer rebuild initial)
+  cached_low_ri_ = -1;
+  cached_high_ri_ = -1;
+  cached_disect_max_ = -1;
+  cached_disect_min_ = -1;
+  cached_disect_choice_ = -1;
 
   // Initialiser la lookup table des couleurs
   initializeColorLUT();
@@ -117,6 +130,138 @@ void ReachMapVisual::initializeFixedGrid(const std::shared_ptr<const reachabilit
   RCLCPP_INFO(rclcpp::get_logger("ReachMapVisual"), "Grid initialization complete");
 }
 
+// SPARSE GRID: Construit seulement les voxels VISIBLES (10-30x moins de RAM/CPU)
+void ReachMapVisual::buildSparseGridOptimized(
+    const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg,
+    int low_ri, int high_ri, int disect_max, int disect_min, int disect_choice)
+{
+  const int size_x = msg->size_x;
+  const int size_y = msg->size_y;
+  const int size_z = msg->size_z;
+  const auto& ri_values = msg->ri_values;
+
+  RCLCPP_INFO(rclcpp::get_logger("ReachMapVisual"),
+    "Building sparse grid with filters: RI [%d-%d], grid %dx%dx%d",
+    low_ri, high_ri, size_x, size_y, size_z);
+
+  // Précalculer les limites de dissection
+  int disect_min_idx = disect_min;
+  int disect_max_idx = disect_max;
+  const bool check_dissection = (disect_choice != Disect::None);
+
+  // Approche 2-pass pour allocation exacte:
+  // Pass 1: Compter les voxels visibles (parallèle)
+  std::atomic<size_t> visible_count{0};
+
+  #ifdef _OPENMP
+  #pragma omp parallel for collapse(3) schedule(guided, 256) reduction(+:visible_count)
+  #endif
+  for (int x = 0; x < size_x; ++x) {
+    for (int y = 0; y < size_y; ++y) {
+      for (int z = 0; z < size_z; ++z) {
+        size_t idx = x * size_y * size_z + y * size_z + z;
+        float ri = ri_values[idx];
+
+        // Filtrage RI
+        if (ri < low_ri || ri > high_ri) continue;
+
+        // Filtrage dissection
+        if (check_dissection) {
+          int index_to_check = 0;
+          switch (disect_choice) {
+            case Disect::X: index_to_check = x; break;
+            case Disect::Y: index_to_check = y; break;
+            case Disect::Z: index_to_check = z; break;
+            default: break;
+          }
+          if (index_to_check < disect_min_idx || index_to_check > disect_max_idx) continue;
+        }
+
+        ++visible_count;
+      }
+    }
+  }
+
+  // Pass 2: Allouer et remplir (parallèle avec buffers thread-local)
+  point_buffer_.clear();
+  point_buffer_.reserve(visible_count.load());
+
+  // Utiliser un vecteur de vecteurs temporaires (un par thread)
+  #ifdef _OPENMP
+  const int num_threads = omp_get_max_threads();
+  #else
+  const int num_threads = 1;
+  #endif
+
+  std::vector<std::vector<rviz_rendering::PointCloud::Point>> thread_buffers(num_threads);
+
+  #ifdef _OPENMP
+  #pragma omp parallel
+  #endif
+  {
+    #ifdef _OPENMP
+    const int thread_id = omp_get_thread_num();
+    #else
+    const int thread_id = 0;
+    #endif
+
+    auto& local_buffer = thread_buffers[thread_id];
+    local_buffer.reserve(visible_count.load() / num_threads + 100);
+
+    #ifdef _OPENMP
+    #pragma omp for collapse(3) schedule(guided, 256)
+    #endif
+    for (int x = 0; x < size_x; ++x) {
+      for (int y = 0; y < size_y; ++y) {
+        for (int z = 0; z < size_z; ++z) {
+          size_t idx = x * size_y * size_z + y * size_z + z;
+          float ri = ri_values[idx];
+
+          // Filtrage RI
+          if (ri < low_ri || ri > high_ri) continue;
+
+          // Filtrage dissection
+          if (check_dissection) {
+            int index_to_check = 0;
+            switch (disect_choice) {
+              case Disect::X: index_to_check = x; break;
+              case Disect::Y: index_to_check = y; break;
+              case Disect::Z: index_to_check = z; break;
+              default: break;
+            }
+            if (index_to_check < disect_min_idx || index_to_check > disect_max_idx) continue;
+          }
+
+          // Créer le point
+          rviz_rendering::PointCloud::Point pt;
+          pt.position.x = msg->origine.x + x * msg->resolution;
+          pt.position.y = msg->origine.y + y * msg->resolution;
+          pt.position.z = msg->origine.z + z * msg->resolution;
+
+          // Couleur via LUT
+          int ri_index = static_cast<int>(ri);
+          const int clamped_ri = (ri_index < 0) ? 0 : (ri_index > 100 ? 100 : ri_index);
+          pt.color = color_lut_[clamped_ri];
+          pt.color.a = 1.0f;  // Visible
+
+          local_buffer.push_back(pt);
+        }
+      }
+    }
+  }
+
+  // Merge thread buffers dans le buffer principal
+  for (auto& buf : thread_buffers) {
+    point_buffer_.insert(point_buffer_.end(), buf.begin(), buf.end());
+  }
+
+  RCLCPP_INFO(rclcpp::get_logger("ReachMapVisual"),
+    "Sparse grid built: %zu visible voxels (%.1f%% of total %d)",
+    point_buffer_.size(),
+    100.0 * point_buffer_.size() / (size_x * size_y * size_z),
+    size_x * size_y * size_z);
+}
+
 // Initialiser la lookup table des couleurs pour accès O(1)
 void ReachMapVisual::initializeColorLUT() {
   for (int ri = 0; ri <= 100; ++ri) {
@@ -173,8 +318,10 @@ void ReachMapVisual::updateGridColorsOptimized(const std::shared_ptr<const reach
   const bool check_dissection = (disect_choice != Disect::None);
 
   // Boucle parallélisée avec OpenMP sur tous les voxels de la grille
+  // collapse(3): parallélise les 3 boucles imbriquées (3.4M itérations au lieu de 150)
+  // schedule(guided): charge dynamique pour équilibrage optimal
   #ifdef _OPENMP
-  #pragma omp parallel for schedule(static) if(expected_size > 1000)
+  #pragma omp parallel for collapse(3) schedule(guided, 256) if(expected_size > 1000)
   #endif
   for (int x = 0; x < size_x; ++x) {
     for (int y = 0; y < size_y; ++y) {
@@ -380,19 +527,52 @@ void ReachMapVisual::convertPointsToPointCloud(const reachability_map_visualizer
 void ReachMapVisual::setMessage(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg, bool do_display_arrow, bool do_display_sphere,
                   int low_ri, int high_ri, int disect_max_, int disect_min_, int disect_choice)
 {
-  // Étape 1 : Initialiser la grille fixe au premier message ou si les paramètres changent
-  // Vérifier avec size_x/y/z au lieu de ws_spheres.size()
-  size_t expected_size = msg->size_x * msg->size_y * msg->size_z;
-  if (!grid_initialized_ || point_buffer_.size() != expected_size) {
-    initializeFixedGrid(msg);
+  // SPARSE GRID MODE: Construire seulement les voxels visibles (10-30x moins de RAM/CPU)
+  // Rebuild si: première fois OU paramètres grille changent OU filtres changent
+
+  bool grid_params_changed = !grid_initialized_ ||
+                              msg->size_x != cached_size_x_ ||
+                              msg->size_y != cached_size_y_ ||
+                              msg->size_z != cached_size_z_ ||
+                              msg->resolution != cached_resolution_;
+
+  bool filters_changed = low_ri != cached_low_ri_ ||
+                          high_ri != cached_high_ri_ ||
+                          disect_max_ != cached_disect_max_ ||
+                          disect_min_ != cached_disect_min_ ||
+                          disect_choice != cached_disect_choice_;
+
+  if (grid_params_changed || filters_changed) {
+    // Initialiser LUT couleurs si nécessaire
+    if (!grid_initialized_) {
+      initializeColorLUT();
+      grid_initialized_ = true;
+      use_sparse_grid_ = true;  // Activer sparse mode
+    }
+
+    // Rebuild sparse grid avec les nouveaux paramètres
+    buildSparseGridOptimized(msg, low_ri, high_ri, disect_max_, disect_min_, disect_choice);
+
+    // Sauvegarder cache
+    cached_size_x_ = msg->size_x;
+    cached_size_y_ = msg->size_y;
+    cached_size_z_ = msg->size_z;
+    cached_resolution_ = msg->resolution;
+    cached_origin_ = msg->origine;
+    cached_low_ri_ = low_ri;
+    cached_high_ri_ = high_ri;
+    cached_disect_max_ = disect_max_;
+    cached_disect_min_ = disect_min_;
+    cached_disect_choice_ = disect_choice;
   }
 
-  // Étape 2 : Mettre à jour uniquement les couleurs et alpha selon les filtres
-  // Utiliser la version optimisée avec OpenMP + vectorisation + ri_values array
-  updateGridColorsOptimized(msg, low_ri, high_ri, disect_max_, disect_min_, disect_choice);
-
-  // Étape 3 : Envoyer le buffer au GPU (clear + addPoints, mais le buffer est réutilisé)
-  point_cloud_visual_->clear();
+  // Envoyer le buffer au GPU
+  // OPTIMISATION: clear() seulement si taille change (évite désalloc/réalloc GPU)
+  static size_t last_buffer_size = 0;
+  if (last_buffer_size != point_buffer_.size()) {
+    point_cloud_visual_->clear();
+    last_buffer_size = point_buffer_.size();
+  }
   point_cloud_visual_->setDimensions(msg->resolution, msg->resolution, msg->resolution);
   point_cloud_visual_->addPoints(point_buffer_.begin(), point_buffer_.end());
 }

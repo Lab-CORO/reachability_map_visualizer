@@ -77,8 +77,15 @@ private:
   float cached_resolution_;
   geometry_msgs::msg::Point cached_origin_;
 
+  // Cache pour les filtres (détecter changements → rebuild sparse grid)
+  int cached_low_ri_, cached_high_ri_;
+  int cached_disect_max_, cached_disect_min_, cached_disect_choice_;
+  bool use_sparse_grid_;  // Mode sparse (seulement voxels visibles)
+
   // Helpers
   void initializeFixedGrid(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg);
+  void buildSparseGridOptimized(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg,
+                                int low_ri, int high_ri, int disect_max, int disect_min, int disect_choice);
   void updateGridColors(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg,
                         int low_ri, int high_ri, int disect_max, int disect_min, int disect_choice);
   void updateGridColorsOptimized(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg,
