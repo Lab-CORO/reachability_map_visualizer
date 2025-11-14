@@ -5,6 +5,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/msg/point_field.hpp>
 #include <rviz_rendering/objects/point_cloud.hpp>
+#include <rclcpp/rclcpp.hpp>
 
 // Forward declaration pour GPU renderer
 namespace reachability_map_visualizer {
@@ -86,6 +87,9 @@ private:
   int cached_low_ri_, cached_high_ri_;
   int cached_disect_max_, cached_disect_min_, cached_disect_choice_;
   bool use_sparse_grid_;  // Mode sparse (seulement voxels visibles)
+
+  // Cache timestamp du dernier message (pour détecter nouvelles données)
+  rclcpp::Time last_msg_timestamp_;
 
   // Helpers
   void initializeFixedGrid(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg);

@@ -51,6 +51,7 @@ namespace reachability_map_visualizer
   cached_disect_min_ = -1;
   cached_disect_choice_ = -1;
   cached_msg_ = nullptr;
+  last_msg_timestamp_ = rclcpp::Time(0);  // Timestamp initial invalide
 
   // Initialiser la lookup table des couleurs
   initializeColorLUT();
@@ -586,7 +587,10 @@ void ReachMapVisual::setMessage(const std::shared_ptr<const reachability_map_vis
                           disect_min_ != cached_disect_min_ ||
                           disect_choice != cached_disect_choice_;
 
-  if (grid_params_changed || filters_changed) {
+  // Nouveau message détecté si timestamp différent (même si dimensions identiques)
+  bool new_data = (msg->header.stamp != last_msg_timestamp_);
+
+  if (grid_params_changed || filters_changed || new_data) {
     // Initialiser LUT couleurs si nécessaire
     if (!grid_initialized_) {
       initializeColorLUT();
@@ -608,6 +612,7 @@ void ReachMapVisual::setMessage(const std::shared_ptr<const reachability_map_vis
     cached_disect_max_ = disect_max_;
     cached_disect_min_ = disect_min_;
     cached_disect_choice_ = disect_choice;
+    last_msg_timestamp_ = msg->header.stamp;  // Sauvegarder timestamp
   }
 
   // Envoyer le buffer au GPU (via Ogre PointCloud)
