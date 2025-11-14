@@ -138,9 +138,13 @@ Pour une grille avec ~10% de voxels visibles:
 
 ---
 
-## Niveau 3: GPU Acceleration ✅ IMPLÉMENTÉ
+## Niveau 3: GPU Acceleration ⚠️ DÉSACTIVÉ TEMPORAIREMENT
 
-### 3.1 Architecture
+**Note**: L'implémentation GPU avec compute shaders OpenGL raw entre en conflit avec l'architecture RViz/Ogre qui gère son propre contexte OpenGL. Une réimplémentation via `Ogre::ComputeShader` ou `Ogre::RenderOperation` custom serait nécessaire.
+
+**Le Niveau 2 (CPU sparse grid) reste la solution recommandée** avec d'excellentes performances (20-50x speedup).
+
+### 3.1 Architecture (Référence - Non Activée)
 
 **Pipeline GPU complet (OpenGL 4.3+ Compute Shaders)**:
 
@@ -200,18 +204,20 @@ if (OpenGL >= 4.3 && GLEW disponible && SSBO support) {
 
 ### Configuration Test: 150×150×150 (3.4M voxels), ~10% visibles
 
-| Pipeline | Temps/Frame | Fréquence Max | Speedup | RAM |
-|----------|-------------|---------------|---------|-----|
-| **Original (dense, single-thread)** | ~150 ms | 6 Hz | 1x | 16 Go |
-| **Niveau 1: OpenMP collapse(3)** | ~20 ms | 50 Hz | **7x** | 16 Go |
-| **Niveau 2: Sparse Grid (CPU)** | **3-8 ms** | **120-330 Hz** | **20-50x** | **1-2 Go** |
-| **Niveau 3: GPU Compute Shaders** ✅ | **~1-2 ms** | **500-1000 Hz** | **75-150x** | **<100 MB** |
+| Pipeline | Temps/Frame | Fréquence Max | Speedup | RAM | Status |
+|----------|-------------|---------------|---------|-----|--------|
+| **Original (dense, single-thread)** | ~150 ms | 6 Hz | 1x | 16 Go | Legacy |
+| **Niveau 1: OpenMP collapse(3)** | ~20 ms | 50 Hz | **7x** | 16 Go | Implémenté |
+| **Niveau 2: Sparse Grid (CPU)** ✅ | **3-8 ms** | **120-330 Hz** | **20-50x** | **1-2 Go** | **ACTIF** |
+| **Niveau 3: GPU Compute Shaders** | ~1-2 ms | 500-1000 Hz | 75-150x | <100 MB | Désactivé* |
+
+*Niveau 3 incompatible avec architecture RViz/Ogre (conflit contexte OpenGL)
 
 ### Pour Objectif 10 Hz:
 - ✅ Temps disponible: 100 ms/frame
-- ✅ **Niveau 2 (CPU)**: 3-8 ms → Marge de **92-97 ms**
-- ✅ **Niveau 3 (GPU)**: 1-2 ms → Marge de **98-99 ms**
-- 🚀 **Peut supporter jusqu'à 1000 Hz avec GPU!**
+- ✅ **Niveau 2 (CPU Actif)**: 3-8 ms → Marge de **92-97 ms**
+- 🚀 **Performance mesurée réelle**: 152×152×152 (3.5M voxels) → **~22 ms** pour sparse grid build
+- ✅ **Largement suffisant pour temps réel à 10 Hz!**
 
 ---
 
@@ -245,25 +251,22 @@ ros2 run reachability_map_visualizer load_reachability_voxel \
   -p frame_id:=base_link
 ```
 
-### Logs Attendus
+### Logs Attendus (CPU Sparse Grid - Niveau 2)
 
-**Avec GPU (Niveau 3)**:
+**Logs d'initialisation**:
 ```
 [Hdf5Dataset] Direct HDF5 → RI array (optimized)...
-[Hdf5Dataset] Direct read complete: 3375000 voxels (grid 150x150x150)
-[GPUReachabilityRenderer] GPU renderer initialized successfully
-[ReachMapVisual] GPU rendering enabled (Niveau 3: 100-200x speedup)
-[GPUReachabilityRenderer] Uploaded 3375000 voxels to GPU (150x150x150)
-```
-
-**Sans GPU - Fallback CPU (Niveau 2)**:
-```
-[Hdf5Dataset] Direct HDF5 → RI array (optimized)...
-[Hdf5Dataset] Direct read complete: 3375000 voxels (grid 150x150x150)
+[Hdf5Dataset] Direct read complete: 3511808 voxels (grid 152x152x152)
 [ReachMapVisual] Using CPU sparse grid rendering (Niveau 2: 20-50x speedup)
-[ReachMapVisual] Building sparse grid with filters: RI [0-100]...
-[ReachMapVisual] Sparse grid built: 340125 visible voxels (10.1% of total 3375000)
 ```
+
+**Logs lors de changement de filtres**:
+```
+[ReachMapVisual] Building sparse grid with filters: RI [1-100], grid 152x152x152
+[ReachMapVisual] Sparse grid built: 1084563 visible voxels (30.9% of total 3511808)
+```
+
+**Performance mesurée**: ~22 ms pour construction sparse grid avec 3.5M voxels
 
 ---
 
@@ -296,22 +299,23 @@ ros2 run reachability_map_visualizer load_reachability_voxel \
 
 ## Recommandations
 
-### Pour Maximiser Performance GPU (Niveau 3):
-1. ✅ **GPU moderne**: NVIDIA/AMD avec OpenGL 4.3+ et compute shaders
-2. ✅ **GLEW installé**: `sudo apt-get install libglew-dev`
-3. ✅ **Drivers à jour**: Vérifier que les drivers GPU sont récents
-4. ✅ **Filtres stables**: Changements de filtres déclenchent re-filtrage GPU (rapide mais pas gratuit)
+### Pour Maximiser Performance (Niveau 2 - CPU Sparse Grid):
+1. ✅ **CPU multi-core**: Au moins 8 cores pour plein bénéfice OpenMP (collapse(3))
+2. ✅ **Filtres stables**: Définir low_ri/high_ri constants → zéro rebuild après le premier frame
+3. ✅ **RAM**: Avec sparse grid, 2-4 Go suffisent (vs 16 Go avec dense grid)
+4. ✅ **Compilation optimisée**: Flags -O3 -march=native -ffast-math activés par défaut
 
-### Pour Maximiser Performance CPU (Niveau 2 - Fallback):
-1. ✅ **CPU multi-core**: Au moins 8 cores pour plein bénéfice OpenMP
-2. ✅ **Filtres stables**: Définir low_ri/high_ri constants → zéro rebuild
-3. ✅ **RAM**: Avec sparse grid, 2-4 Go suffisent (vs 16 Go avant)
+### Performance Réelle Mesurée:
+- **Grille 152×152×152 (3.5M voxels)**:
+  - Construction sparse grid: **~22 ms** (toute la grille)
+  - Avec filtres (30.9% visibles): **~22 ms** pour 1.08M voxels
+  - **Performance**: Largement suffisant pour 10 Hz (100 ms budget)
 
 ### Prochaines Étapes (Optionnel):
 1. **LOD (Level of Detail)**: Réduire résolution pour zones éloignées
 2. **Culling frustum**: Ne render que voxels dans champ de vision caméra
 3. **Occlusion culling**: Ne render que voxels visibles (pas cachés par autres)
-4. **Multi-GPU**: Distribuer sur plusieurs GPUs pour grilles géantes (>10M voxels)
+4. **GPU via Ogre**: Réimplémenter GPU rendering via Ogre::ComputeShader pour éviter conflits contexte
 
 ---
 

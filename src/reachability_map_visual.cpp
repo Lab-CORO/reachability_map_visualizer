@@ -55,24 +55,14 @@ namespace reachability_map_visualizer
   // Initialiser la lookup table des couleurs
   initializeColorLUT();
 
-  // NIVEAU 3: Tenter d'initialiser le GPU renderer
-  try {
-    gpu_renderer_ = std::make_shared<GPUReachabilityRenderer>(scene_manager, frame_node_);
-    use_gpu_rendering_ = gpu_renderer_->isEnabled();
+  // NIVEAU 3: GPU rendering désactivé temporairement (incompatibilité RViz/Ogre)
+  // Le GPU renderer fait des appels OpenGL raw qui entrent en conflit avec le contexte Ogre
+  // TODO: Implémenter via Ogre::ComputeShader ou Ogre::RenderOperation custom
+  use_gpu_rendering_ = false;
+  gpu_renderer_.reset();
 
-    if (use_gpu_rendering_) {
-      RCLCPP_INFO(rclcpp::get_logger("ReachMapVisual"),
-                  "GPU rendering enabled (Niveau 3: 100-200x speedup)");
-    } else {
-      RCLCPP_INFO(rclcpp::get_logger("ReachMapVisual"),
-                  "Using CPU sparse grid rendering (Niveau 2: 20-50x speedup)");
-    }
-  } catch (const std::exception& e) {
-    RCLCPP_WARN(rclcpp::get_logger("ReachMapVisual"),
-                "GPU renderer initialization failed: %s. Falling back to CPU.", e.what());
-    use_gpu_rendering_ = false;
-    gpu_renderer_.reset();
-  }
+  RCLCPP_INFO(rclcpp::get_logger("ReachMapVisual"),
+              "Using CPU sparse grid rendering (Niveau 2: 20-50x speedup)");
 
   // arrow_.reset(new rviz::Arrow( scene_manager_, frame_node_ ));
 }
