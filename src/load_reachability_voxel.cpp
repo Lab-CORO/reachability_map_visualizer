@@ -104,6 +104,16 @@ int main(int argc, char **argv)
     ws_msg->header.frame_id = frame_id;
     ws_msg->resolution = resolution_;
 
+    // Remplir les dimensions de la grille depuis HDF5
+    ws_msg->size_x = h5.get_voxel_grid_size_x();
+    ws_msg->size_y = h5.get_voxel_grid_size_y();
+    ws_msg->size_z = h5.get_voxel_grid_size_z();
+
+    // Remplir l'origine depuis HDF5
+    ws_msg->origine.x = h5.get_origine_x();
+    ws_msg->origine.y = h5.get_origine_y();
+    ws_msg->origine.z = h5.get_origine_z();
+
     for (const auto& sphere_pair : sphere_col)
     { 
         reachability_map_visualizer::msg::WsSphere wss;

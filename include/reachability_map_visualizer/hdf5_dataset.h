@@ -40,6 +40,14 @@ public:
   double get_resolution();
   double get_origine_offset();
 
+  // Getters pour les propriétés de la grille
+  double get_origine_x();
+  double get_origine_y();
+  double get_origine_z();
+  int get_voxel_grid_size_x();
+  int get_voxel_grid_size_y();
+  int get_voxel_grid_size_z();
+
 private:
 
   bool checkPath(std::string path);
@@ -61,6 +69,14 @@ private:
   double res_ = 0.0;
   double origine_offset = 0.0;
   int index = 0;
+
+  // Nouvelles propriétés de la grille
+  double origine_x_ = 0.0;
+  double origine_y_ = 0.0;
+  double origine_z_ = 0.0;
+  int voxel_grid_size_x_ = 0;
+  int voxel_grid_size_y_ = 0;
+  int voxel_grid_size_z_ = 0;
 };
 
 }  // namespace reachability_map_visualizer

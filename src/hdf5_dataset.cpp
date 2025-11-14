@@ -108,18 +108,60 @@ bool Hdf5Dataset::open() //TODO add hdf5 path to dataset
 }
 
 
-  hid_t attr_origine = H5Aopen(this->reachability_map, "origine_y", H5P_DEFAULT);
-  if (attr_origine < 0) {
-      RCLCPP_ERROR(rclcpp::get_logger("Hdf5Dataset"), "Attribute 'origine_y' not found");
-      return false;
+  // Lire origine_x
+  hid_t attr_origine_x = H5Aopen(this->reachability_map, "origine_x", H5P_DEFAULT);
+  if (attr_origine_x >= 0) {
+    type_id = H5Aget_type(attr_origine_x);
+    H5Aread(attr_origine_x, type_id, &this->origine_x_);
+    H5Aclose(attr_origine_x);
   }
-  type_id = H5Aget_type(attr_origine);
-  if (H5Aread(attr_origine, type_id, &this->origine_offset ) < 0) {
-    RCLCPP_ERROR(rclcpp::get_logger("Hdf5Dataset"), "Failed to read attribute 'origine_y'");
 
-    return false;
-}
+  // Lire origine_y
+  hid_t attr_origine_y = H5Aopen(this->reachability_map, "origine_y", H5P_DEFAULT);
+  if (attr_origine_y >= 0) {
+    type_id = H5Aget_type(attr_origine_y);
+    H5Aread(attr_origine_y, type_id, &this->origine_y_);
+    this->origine_offset = this->origine_y_;  // Pour compatibilité
+    H5Aclose(attr_origine_y);
+  }
 
+  // Lire origine_z
+  hid_t attr_origine_z = H5Aopen(this->reachability_map, "origine_z", H5P_DEFAULT);
+  if (attr_origine_z >= 0) {
+    type_id = H5Aget_type(attr_origine_z);
+    H5Aread(attr_origine_z, type_id, &this->origine_z_);
+    H5Aclose(attr_origine_z);
+  }
+
+  // Lire voxel_grid_size_x
+  hid_t attr_size_x = H5Aopen(this->reachability_map, "voxel_grid_size_x", H5P_DEFAULT);
+  if (attr_size_x >= 0) {
+    type_id = H5Aget_type(attr_size_x);
+    H5Aread(attr_size_x, type_id, &this->voxel_grid_size_x_);
+    H5Aclose(attr_size_x);
+  }
+
+  // Lire voxel_grid_size_y
+  hid_t attr_size_y = H5Aopen(this->reachability_map, "voxel_grid_size_y", H5P_DEFAULT);
+  if (attr_size_y >= 0) {
+    type_id = H5Aget_type(attr_size_y);
+    H5Aread(attr_size_y, type_id, &this->voxel_grid_size_y_);
+    H5Aclose(attr_size_y);
+  }
+
+  // Lire voxel_grid_size_z
+  hid_t attr_size_z = H5Aopen(this->reachability_map, "voxel_grid_size_z", H5P_DEFAULT);
+  if (attr_size_z >= 0) {
+    type_id = H5Aget_type(attr_size_z);
+    H5Aread(attr_size_z, type_id, &this->voxel_grid_size_z_);
+    H5Aclose(attr_size_z);
+  }
+
+  H5Aclose(attr_resolution);
+
+  RCLCPP_INFO(rclcpp::get_logger("Hdf5Dataset"), "Grid parameters: size=(%d,%d,%d), origin=(%.2f,%.2f,%.2f), resolution=%.4f",
+    this->voxel_grid_size_x_, this->voxel_grid_size_y_, this->voxel_grid_size_z_,
+    this->origine_x_, this->origine_y_, this->origine_z_, this->res_);
 
   return true;
 }
@@ -310,6 +352,30 @@ double Hdf5Dataset::get_resolution(){
 
 double Hdf5Dataset::get_origine_offset(){
   return this->origine_offset;
+}
+
+double Hdf5Dataset::get_origine_x() {
+  return this->origine_x_;
+}
+
+double Hdf5Dataset::get_origine_y() {
+  return this->origine_y_;
+}
+
+double Hdf5Dataset::get_origine_z() {
+  return this->origine_z_;
+}
+
+int Hdf5Dataset::get_voxel_grid_size_x() {
+  return this->voxel_grid_size_x_;
+}
+
+int Hdf5Dataset::get_voxel_grid_size_y() {
+  return this->voxel_grid_size_y_;
+}
+
+int Hdf5Dataset::get_voxel_grid_size_z() {
+  return this->voxel_grid_size_z_;
 }
 
 }  // namespace hdf5_dataset
