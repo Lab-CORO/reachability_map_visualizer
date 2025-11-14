@@ -100,33 +100,65 @@ int main(int argc, char **argv)
 
 
     ws_msg->header.stamp = node->get_clock()->now();
-
     ws_msg->header.frame_id = frame_id;
     ws_msg->resolution = resolution_;
 
     // Remplir les dimensions de la grille depuis HDF5
-    ws_msg->size_x = h5.get_voxel_grid_size_x();
-    ws_msg->size_y = h5.get_voxel_grid_size_y();
-    ws_msg->size_z = h5.get_voxel_grid_size_z();
+    int size_x = h5.get_voxel_grid_size_x();
+    int size_y = h5.get_voxel_grid_size_y();
+    int size_z = h5.get_voxel_grid_size_z();
+
+    ws_msg->size_x = size_x;
+    ws_msg->size_y = size_y;
+    ws_msg->size_z = size_z;
 
     // Remplir l'origine depuis HDF5
-    ws_msg->origine.x = h5.get_origine_x();
-    ws_msg->origine.y = h5.get_origine_y();
-    ws_msg->origine.z = h5.get_origine_z();
+    double origine_x = h5.get_origine_x();
+    double origine_y = h5.get_origine_y();
+    double origine_z = h5.get_origine_z();
 
-    for (const auto& sphere_pair : sphere_col)
-    { 
+    ws_msg->origine.x = origine_x;
+    ws_msg->origine.y = origine_y;
+    ws_msg->origine.z = origine_z;
+
+    // OPTIMISATION: Créer un array dense de RI (grille complète)
+    size_t total_voxels = size_x * size_y * size_z;
+    ws_msg->ri_values.resize(total_voxels, 0.0f);  // Initialiser à 0
+
+    RCLCPP_INFO(node->get_logger(), "Creating dense RI array: %dx%dx%d = %zu voxels",
+                size_x, size_y, size_z, total_voxels);
+
+    // Remplir l'array avec les valeurs RI depuis sphere_col
+    for (const auto& sphere_pair : sphere_col) {
+      // Convertir position mondiale → indices de grille
+      int ix = static_cast<int>(std::round((sphere_pair.first[0] - origine_x) / resolution_));
+      int iy = static_cast<int>(std::round((sphere_pair.first[1] - origine_y) / resolution_));
+      int iz = static_cast<int>(std::round((sphere_pair.first[2] - origine_z) / resolution_));
+
+      // Vérifier les bounds
+      if (ix >= 0 && ix < size_x && iy >= 0 && iy < size_y && iz >= 0 && iz < size_z) {
+        // Index flat: x * size_y * size_z + y * size_z + z
+        size_t index = ix * size_y * size_z + iy * size_z + iz;
+        ws_msg->ri_values[index] = sphere_pair.second;
+      }
+    }
+
+    RCLCPP_INFO(node->get_logger(), "Filled %zu non-zero voxels in dense array", sphere_col.size());
+
+    // Legacy: garder ws_spheres pour compatibilité (optionnel, peut être retiré)
+    // Commenté pour économiser bande passante - décommenter si besoin
+    /*
+    for (const auto& sphere_pair : sphere_col) {
         reachability_map_visualizer::msg::WsSphere wss;
         wss.point.x = (sphere_pair.first)[0];
         wss.point.y = (sphere_pair.first)[1];
         wss.point.z = (sphere_pair.first)[2];
         wss.ri = sphere_pair.second;
-
         ws_msg->ws_spheres.push_back(wss);
-
-      ws_msg->header.stamp = node->get_clock()->now();
-      previous_index_map = index_map;
     }
+    */
+
+    previous_index_map = index_map;
   }
   // send msg
   publisher_voxel->publish(marker);

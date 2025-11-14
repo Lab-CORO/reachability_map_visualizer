@@ -70,9 +70,11 @@ inline Ogre::ColourValue ReachMapVisual::getColorForRI(float ri) const
 // Initialise la grille fixe avec toutes les positions des voxels
 void ReachMapVisual::initializeFixedGrid(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg)
 {
-  // Vérifier si la grille a changé de taille
+  // Vérifier si la grille a changé de taille ou paramètres
   if (grid_initialized_ &&
-      msg->ws_spheres.size() == point_buffer_.size() &&
+      msg->size_x == cached_size_x_ &&
+      msg->size_y == cached_size_y_ &&
+      msg->size_z == cached_size_z_ &&
       msg->resolution == cached_resolution_ &&
       msg->origine.x == cached_origin_.x &&
       msg->origine.y == cached_origin_.y &&
@@ -81,25 +83,38 @@ void ReachMapVisual::initializeFixedGrid(const std::shared_ptr<const reachabilit
     return;
   }
 
+  RCLCPP_INFO(rclcpp::get_logger("ReachMapVisual"),
+    "Initializing fixed grid: %dx%dx%d = %d voxels, resolution=%.4f",
+    msg->size_x, msg->size_y, msg->size_z, msg->size_x * msg->size_y * msg->size_z, msg->resolution);
+
   // Sauvegarder les paramètres de la grille
+  cached_size_x_ = msg->size_x;
+  cached_size_y_ = msg->size_y;
+  cached_size_z_ = msg->size_z;
   cached_resolution_ = msg->resolution;
   cached_origin_ = msg->origine;
 
-  // Pré-allouer le buffer avec la taille exacte
+  // Pré-allouer le buffer avec la taille complète de la grille
+  size_t total_voxels = msg->size_x * msg->size_y * msg->size_z;
   point_buffer_.clear();
-  point_buffer_.reserve(msg->ws_spheres.size());
+  point_buffer_.reserve(total_voxels);
 
-  // Créer tous les points avec leurs positions fixes
-  for (size_t i = 0; i < msg->ws_spheres.size(); ++i) {
-    rviz_rendering::PointCloud::Point pt;
-    pt.position.x = msg->ws_spheres[i].point.x;
-    pt.position.y = msg->ws_spheres[i].point.y;
-    pt.position.z = msg->ws_spheres[i].point.z;
-    pt.color = Ogre::ColourValue(1.0f, 0.0f, 0.0f, 0.0f);  // Couleur par défaut, alpha = 0 (invisible)
-    point_buffer_.push_back(pt);
+  // Créer TOUTES les positions de la grille (complète)
+  for (int x = 0; x < msg->size_x; ++x) {
+    for (int y = 0; y < msg->size_y; ++y) {
+      for (int z = 0; z < msg->size_z; ++z) {
+        rviz_rendering::PointCloud::Point pt;
+        pt.position.x = msg->origine.x + x * msg->resolution;
+        pt.position.y = msg->origine.y + y * msg->resolution;
+        pt.position.z = msg->origine.z + z * msg->resolution;
+        pt.color = Ogre::ColourValue(1.0f, 0.0f, 0.0f, 0.0f);  // Alpha = 0 (invisible par défaut)
+        point_buffer_.push_back(pt);
+      }
+    }
   }
 
   grid_initialized_ = true;
+  RCLCPP_INFO(rclcpp::get_logger("ReachMapVisual"), "Grid initialization complete");
 }
 
 // Initialiser la lookup table des couleurs pour accès O(1)
@@ -119,84 +134,95 @@ void ReachMapVisual::initializeColorLUT() {
   }
 }
 
-// Version ultra-optimisée avec OpenMP et vectorisation
+// Version ultra-optimisée avec OpenMP et vectorisation - utilise ri_values array
 void ReachMapVisual::updateGridColorsOptimized(const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>& msg,
                                                int low_ri, int high_ri, int disect_max, int disect_min, int disect_choice)
 {
-  // Vérifier que la grille a été initialisée et que les tailles correspondent
-  if (!grid_initialized_ || msg->ws_spheres.size() != point_buffer_.size()) {
+  // Vérifier que la grille a été initialisée
+  if (!grid_initialized_) {
     return;
   }
 
-  const size_t num_voxels = msg->ws_spheres.size();
-
-  // Précalculer les limites de dissection (hors de la boucle parallèle)
-  float hight_min = 0.0f, hight_max = 0.0f;
-  const bool check_dissection = (disect_choice != Disect::None);
-
-  if (check_dissection) {
-    switch (disect_choice) {
-      case Disect::X:
-        hight_min = disect_min * msg->resolution - msg->origine.x;
-        hight_max = disect_max * msg->resolution - msg->origine.x;
-        break;
-      case Disect::Y:
-        hight_min = disect_min * msg->resolution - msg->origine.y;
-        hight_max = disect_max * msg->resolution - msg->origine.y;
-        break;
-      case Disect::Z:
-        hight_min = disect_min * msg->resolution - msg->origine.z;
-        hight_max = disect_max * msg->resolution - msg->origine.z;
-        break;
-      default:
-        break;
-    }
+  // Vérifier que ri_values est présent et de la bonne taille
+  size_t expected_size = msg->size_x * msg->size_y * msg->size_z;
+  if (msg->ri_values.empty()) {
+    RCLCPP_WARN(rclcpp::get_logger("ReachMapVisual"), "ri_values is empty, using legacy ws_spheres");
+    // Fallback vers ws_spheres si ri_values n'est pas rempli
+    updateGridColors(msg, low_ri, high_ri, disect_max, disect_min, disect_choice);
+    return;
   }
 
-  // Pointeur direct vers les données pour éviter indirections
-  const auto& spheres = msg->ws_spheres;
+  if (msg->ri_values.size() != expected_size) {
+    RCLCPP_ERROR(rclcpp::get_logger("ReachMapVisual"),
+      "ri_values size mismatch: got %zu, expected %zu", msg->ri_values.size(), expected_size);
+    return;
+  }
+
+  // Dimensions de la grille
+  const int size_x = msg->size_x;
+  const int size_y = msg->size_y;
+  const int size_z = msg->size_z;
+
+  // Pointeur direct vers les données
+  const auto& ri_values = msg->ri_values;
   auto& points = point_buffer_;
 
-  // Boucle parallélisée avec OpenMP
-  // pragma omp parallel for si disponible, sinon boucle normale
+  // Précalculer les limites de dissection pour les indices de grille
+  int disect_min_idx = disect_min;
+  int disect_max_idx = disect_max;
+  const bool check_dissection = (disect_choice != Disect::None);
+
+  // Boucle parallélisée avec OpenMP sur tous les voxels de la grille
   #ifdef _OPENMP
-  #pragma omp parallel for schedule(static) if(num_voxels > 1000)
+  #pragma omp parallel for schedule(static) if(expected_size > 1000)
   #endif
-  for (size_t i = 0; i < num_voxels; ++i) {
-    const auto& voxel = spheres[i];
-    auto& point = points[i];
+  for (int x = 0; x < size_x; ++x) {
+    for (int y = 0; y < size_y; ++y) {
+      for (int z = 0; z < size_z; ++z) {
+        // Index flat: x * size_y * size_z + y * size_z + z
+        size_t idx = x * size_y * size_z + y * size_z + z;
 
-    // Filtrage par RI (branches prédictibles pour le compilateur)
-    if (voxel.ri < low_ri || voxel.ri > high_ri) {
-      point.color.a = 0.0f;  // Invisible
-      continue;
-    }
+        float ri = ri_values[idx];
+        auto& point = points[idx];
 
-    // Filtrage par dissection
-    if (check_dissection) {
-      float value_to_check;
+        // Filtrage par RI
+        if (ri < low_ri || ri > high_ri) {
+          point.color.a = 0.0f;  // Invisible
+          continue;
+        }
 
-      // Éviter le switch dans la boucle chaude
-      if (disect_choice == Disect::X) {
-        value_to_check = voxel.point.x;
-      } else if (disect_choice == Disect::Y) {
-        value_to_check = voxel.point.y;
-      } else { // Disect::Z
-        value_to_check = voxel.point.z;
+        // Filtrage par dissection (basé sur les indices de grille)
+        if (check_dissection) {
+          int index_to_check = 0;
+
+          switch (disect_choice) {
+            case Disect::X:
+              index_to_check = x;
+              break;
+            case Disect::Y:
+              index_to_check = y;
+              break;
+            case Disect::Z:
+              index_to_check = z;
+              break;
+            default:
+              break;
+          }
+
+          if (index_to_check < disect_min_idx || index_to_check > disect_max_idx) {
+            point.color.a = 0.0f;  // Invisible
+            continue;
+          }
+        }
+
+        // Voxel visible : lookup table pour la couleur
+        const int ri_index = static_cast<int>(ri);
+        const int clamped_ri = (ri_index < 0) ? 0 : (ri_index > 100 ? 100 : ri_index);
+
+        const auto& color = color_lut_[clamped_ri];
+        point.color = color;  // Copie vectorisée par le compilateur
       }
-
-      if (value_to_check < hight_min || value_to_check > hight_max) {
-        point.color.a = 0.0f;  // Invisible
-        continue;
-      }
     }
-
-    // Voxel visible : lookup table au lieu de if/else
-    const int ri_index = static_cast<int>(voxel.ri);
-    const int clamped_ri = (ri_index < 0) ? 0 : (ri_index > 100 ? 100 : ri_index);
-
-    const auto& color = color_lut_[clamped_ri];
-    point.color = color;  // Copie vectorisée par le compilateur
   }
 }
 
@@ -355,12 +381,14 @@ void ReachMapVisual::setMessage(const std::shared_ptr<const reachability_map_vis
                   int low_ri, int high_ri, int disect_max_, int disect_min_, int disect_choice)
 {
   // Étape 1 : Initialiser la grille fixe au premier message ou si les paramètres changent
-  if (!grid_initialized_ || msg->ws_spheres.size() != point_buffer_.size()) {
+  // Vérifier avec size_x/y/z au lieu de ws_spheres.size()
+  size_t expected_size = msg->size_x * msg->size_y * msg->size_z;
+  if (!grid_initialized_ || point_buffer_.size() != expected_size) {
     initializeFixedGrid(msg);
   }
 
   // Étape 2 : Mettre à jour uniquement les couleurs et alpha selon les filtres
-  // Utiliser la version optimisée avec OpenMP + vectorisation
+  // Utiliser la version optimisée avec OpenMP + vectorisation + ri_values array
   updateGridColorsOptimized(msg, low_ri, high_ri, disect_max_, disect_min_, disect_choice);
 
   // Étape 3 : Envoyer le buffer au GPU (clear + addPoints, mais le buffer est réutilisé)
