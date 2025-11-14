@@ -18,6 +18,10 @@
 
 namespace reachability_map_visualizer {
 
+// Cube mesh constants
+constexpr int CUBE_VERTICES = 8;
+constexpr int CUBE_INDICES = 36;
+
 // Cube vertices (unit cube centered at origin)
 static const float CUBE_VERTEX_DATA[CUBE_VERTICES * 3] = {
     -0.5f, -0.5f, -0.5f,  // 0
