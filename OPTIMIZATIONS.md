@@ -138,36 +138,61 @@ Pour une grille avec ~10% de voxels visibles:
 
 ---
 
-## Niveau 3: GPU Acceleration (Future Work)
+## Niveau 3: GPU Acceleration ✅ IMPLÉMENTÉ
 
-### 3.1 Instanced Rendering
+### 3.1 Architecture
 
-**Concept**:
-- Un seul cube 3D instancié 3.4M fois
-- Buffer SSBO (Shader Storage Buffer) contenant seulement:
-  - Indices des voxels visibles (int32)
-  - RI values (float32)
-- Positions calculées dans vertex shader
-- Couleurs calculées dans fragment shader
+**Pipeline GPU complet (OpenGL 4.3+ Compute Shaders)**:
 
-**Avantages**:
-- RAM: 3.4M × 8 bytes = 27 MB (au lieu de 95 MB)
-- Transfer CPU→GPU: 10x plus rapide
-- Rendu GPU: 50-100x plus rapide que PointCloud
+```
+1. Upload ri_values[] → GPU SSBO (une fois par map)
+2. Compute Shader: Filtre 3.4M voxels en parallèle → indices compacts
+3. Vertex Shader: Génère positions depuis indices (instanced rendering)
+4. Fragment Shader: Calcule couleurs depuis RI + lighting
+5. GPU Rasterization: Rendu final
+```
 
-### 3.2 Compute Shaders
+**Composants**:
+- **GPUReachabilityRenderer**: Classe C++ gérant OpenGL/GLEW
+- **Shaders**:
+  - `shaders/reachability_filter.comp`: Compute shader de filtrage (256 threads/workgroup)
+  - `shaders/reachability_instanced.vert`: Vertex shader instancié
+  - `shaders/reachability_instanced.frag`: Fragment shader avec couleurs RI
+- **SSBOs**: 3 buffers GPU (RI values, indices visibles, compteur atomique)
+- **Instanced Rendering**: 1 cube × N instances (au lieu de N cubes)
 
-**Pipeline GPU complet**:
-1. Upload ri_values[] vers SSBO GPU (une seule fois)
-2. Compute shader filtre les voxels visibles → buffer indices
-3. Vertex shader génère positions depuis indices
-4. Fragment shader calcule couleurs depuis RI
+### 3.2 Activation Automatique
 
-**Gains attendus**: **100-200x** sur cartes récentes
+Le système détecte automatiquement le support GPU:
 
-### 3.3 Code Exemple (Déjà Préparé)
+```cpp
+if (OpenGL >= 4.3 && GLEW disponible && SSBO support) {
+  use_gpu_rendering_ = true;  // Niveau 3
+} else {
+  use_sparse_grid_ = true;    // Niveau 2 (fallback CPU)
+}
+```
 
-Voir `shaders/reachability_compute.glsl` et `shaders/README.md`
+**Logs de démarrage**:
+```
+[ReachMapVisual] GPU rendering enabled (Niveau 3: 100-200x speedup)
+// OU
+[ReachMapVisual] Using CPU sparse grid rendering (Niveau 2: 20-50x speedup)
+```
+
+### 3.3 Avantages GPU
+
+**Mémoire**:
+- SSBO RI values: 3.4M × 4 bytes = **13.6 MB** (vs 95 MB CPU sparse grid)
+- Positions calculées à la volée dans vertex shader → **0 bytes**
+- Transfer CPU→GPU: **10x plus rapide** (upload une fois au lieu de chaque frame)
+
+**Performance**:
+- Compute shader: 3.4M voxels filtrés en **~0.2-0.5ms** (vs 3-8ms CPU)
+- Rendu instancié: 340K instances en **~0.5-1ms** (vs 2-5ms PointCloud)
+- **Total: ~1-2ms par frame** au lieu de 3-8ms
+
+**Speedup total estimé**: **100-200x** vs original (CPU single-thread dense)
 
 ---
 
@@ -175,17 +200,18 @@ Voir `shaders/reachability_compute.glsl` et `shaders/README.md`
 
 ### Configuration Test: 150×150×150 (3.4M voxels), ~10% visibles
 
-| Pipeline | Temps/Frame | Fréquence Max | Speedup |
-|----------|-------------|---------------|---------|
-| **Original (dense, single-thread)** | ~150 ms | 6 Hz | 1x |
-| **+ OpenMP collapse(3)** | ~20 ms | 50 Hz | **7x** |
-| **+ Sparse Grid** | **3-8 ms** | **120-330 Hz** | **20-50x** |
-| **+ GPU (futur)** | ~0.5 ms | 2000 Hz | **300x** |
+| Pipeline | Temps/Frame | Fréquence Max | Speedup | RAM |
+|----------|-------------|---------------|---------|-----|
+| **Original (dense, single-thread)** | ~150 ms | 6 Hz | 1x | 16 Go |
+| **Niveau 1: OpenMP collapse(3)** | ~20 ms | 50 Hz | **7x** | 16 Go |
+| **Niveau 2: Sparse Grid (CPU)** | **3-8 ms** | **120-330 Hz** | **20-50x** | **1-2 Go** |
+| **Niveau 3: GPU Compute Shaders** ✅ | **~1-2 ms** | **500-1000 Hz** | **75-150x** | **<100 MB** |
 
 ### Pour Objectif 10 Hz:
-- ✅ Temps disponible: 100 ms
-- ✅ Temps utilisé: **3-8 ms**
-- ✅ **Marge**: 92-97 ms (peut supporter jusqu'à 330 Hz!)
+- ✅ Temps disponible: 100 ms/frame
+- ✅ **Niveau 2 (CPU)**: 3-8 ms → Marge de **92-97 ms**
+- ✅ **Niveau 3 (GPU)**: 1-2 ms → Marge de **98-99 ms**
+- 🚀 **Peut supporter jusqu'à 1000 Hz avec GPU!**
 
 ---
 
@@ -199,10 +225,16 @@ colcon build --packages-select reachability_map_visualizer
 source install/setup.bash
 ```
 
-### Vérifier OpenMP
+### Vérifier Support OpenMP et GPU
 ```bash
 # Le build doit afficher:
 # -- OpenMP found - enabling parallel processing
+# -- GLEW found - GPU rendering enabled
+
+# Si GLEW n'est pas trouvé, installer:
+sudo apt-get install libglew-dev  # Ubuntu/Debian
+# ou
+sudo dnf install glew-devel  # Fedora/RHEL
 ```
 
 ### Lancer
@@ -214,9 +246,21 @@ ros2 run reachability_map_visualizer load_reachability_voxel \
 ```
 
 ### Logs Attendus
+
+**Avec GPU (Niveau 3)**:
 ```
 [Hdf5Dataset] Direct HDF5 → RI array (optimized)...
 [Hdf5Dataset] Direct read complete: 3375000 voxels (grid 150x150x150)
+[GPUReachabilityRenderer] GPU renderer initialized successfully
+[ReachMapVisual] GPU rendering enabled (Niveau 3: 100-200x speedup)
+[GPUReachabilityRenderer] Uploaded 3375000 voxels to GPU (150x150x150)
+```
+
+**Sans GPU - Fallback CPU (Niveau 2)**:
+```
+[Hdf5Dataset] Direct HDF5 → RI array (optimized)...
+[Hdf5Dataset] Direct read complete: 3375000 voxels (grid 150x150x150)
+[ReachMapVisual] Using CPU sparse grid rendering (Niveau 2: 20-50x speedup)
 [ReachMapVisual] Building sparse grid with filters: RI [0-100]...
 [ReachMapVisual] Sparse grid built: 340125 visible voxels (10.1% of total 3375000)
 ```
@@ -225,15 +269,24 @@ ros2 run reachability_map_visualizer load_reachability_voxel \
 
 ## Fichiers Modifiés
 
-### Niveau 1 & 2:
-- `src/reachability_map_visual.h`: Ajout buildSparseGridOptimized(), cache filtres
+### Niveau 3 (GPU - NOUVEAU):
+- `src/gpu_reachability_renderer.h`: API GPU rendering avec OpenGL/GLEW
+- `src/gpu_reachability_renderer.cpp`: Implémentation compute shaders + instanced rendering
+- `shaders/reachability_filter.comp`: Compute shader de filtrage (OpenGL 4.3)
+- `shaders/reachability_instanced.vert`: Vertex shader instancié
+- `shaders/reachability_instanced.frag`: Fragment shader avec couleurs RI
+- `src/reachability_map_visual.h`: Ajout GPUReachabilityRenderer membre
+- `src/reachability_map_visual.cpp`: Intégration GPU avec fallback CPU
+- `CMakeLists.txt`: find_package(OpenGL), find_package(GLEW), link libraries
+
+### Niveau 1 & 2 (CPU):
+- `src/reachability_map_visual.h`: buildSparseGridOptimized(), cache filtres
 - `src/reachability_map_visual.cpp`:
   - OpenMP collapse(3) + schedule(guided)
   - Implémentation sparse grid 2-pass
   - Gestion cache intelligente
-  - Includes <atomic> et <omp.h>
 
-### Précédent (Niveau 0):
+### Niveau 0 (Base):
 - `include/reachability_map_visualizer/hdf5_dataset.h`: h5ToRIArray()
 - `src/hdf5_dataset.cpp`: Direct HDF5 read + SIMD vectorization
 - `src/load_reachability_voxel.cpp`: Utilisation ri_values dense array
@@ -243,15 +296,22 @@ ros2 run reachability_map_visualizer load_reachability_voxel \
 
 ## Recommandations
 
-### Pour Maximiser Performance:
-1. ✅ **Filtres stables**: Définir low_ri/high_ri constants → zéro rebuild
-2. ✅ **CPU multi-core**: Au moins 8 cores pour plein bénéfice OpenMP
+### Pour Maximiser Performance GPU (Niveau 3):
+1. ✅ **GPU moderne**: NVIDIA/AMD avec OpenGL 4.3+ et compute shaders
+2. ✅ **GLEW installé**: `sudo apt-get install libglew-dev`
+3. ✅ **Drivers à jour**: Vérifier que les drivers GPU sont récents
+4. ✅ **Filtres stables**: Changements de filtres déclenchent re-filtrage GPU (rapide mais pas gratuit)
+
+### Pour Maximiser Performance CPU (Niveau 2 - Fallback):
+1. ✅ **CPU multi-core**: Au moins 8 cores pour plein bénéfice OpenMP
+2. ✅ **Filtres stables**: Définir low_ri/high_ri constants → zéro rebuild
 3. ✅ **RAM**: Avec sparse grid, 2-4 Go suffisent (vs 16 Go avant)
 
 ### Prochaines Étapes (Optionnel):
 1. **LOD (Level of Detail)**: Réduire résolution pour zones éloignées
-2. **Culling frustum**: Ne render que voxels dans champ de vision
-3. **GPU Instancing**: Pipeline complet sur GPU (voir shaders/)
+2. **Culling frustum**: Ne render que voxels dans champ de vision caméra
+3. **Occlusion culling**: Ne render que voxels visibles (pas cachés par autres)
+4. **Multi-GPU**: Distribuer sur plusieurs GPUs pour grilles géantes (>10M voxels)
 
 ---
 

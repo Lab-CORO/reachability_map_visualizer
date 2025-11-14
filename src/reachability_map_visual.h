@@ -6,6 +6,11 @@
 #include <sensor_msgs/msg/point_field.hpp>
 #include <rviz_rendering/objects/point_cloud.hpp>
 
+// Forward declaration pour GPU renderer
+namespace reachability_map_visualizer {
+  class GPUReachabilityRenderer;
+}
+
 // namespace Ogre
 // {
 // class Vector3;
@@ -96,6 +101,11 @@ private:
   static constexpr int COLOR_LUT_SIZE = 101;
   std::array<Ogre::ColourValue, COLOR_LUT_SIZE> color_lut_;
   void initializeColorLUT();
+
+  // GPU rendering (Niveau 3 optimization)
+  std::shared_ptr<GPUReachabilityRenderer> gpu_renderer_;
+  bool use_gpu_rendering_;  // Flag: true = GPU, false = CPU sparse grid
+  const std::shared_ptr<const reachability_map_visualizer::msg::WorkSpace>* cached_msg_;  // Cache for GPU upload
 
 };
 }  // end namespace reachability_map_visualizer

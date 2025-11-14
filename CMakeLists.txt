@@ -43,6 +43,16 @@ find_package(rviz_common REQUIRED)
 find_package(rviz_rendering REQUIRED)
 find_package(rviz_ogre_vendor REQUIRED)
 
+# OpenGL for GPU compute shaders (Niveau 3 optimization)
+find_package(OpenGL REQUIRED)
+find_package(GLEW)
+if(GLEW_FOUND)
+    message(STATUS "GLEW found - GPU rendering enabled")
+    add_definitions(-DGPU_RENDERING_ENABLED)
+else()
+    message(STATUS "GLEW not found - GPU rendering disabled")
+endif()
+
 # ------------------------------------------------------------------------------
 # Message generation
 # ------------------------------------------------------------------------------
@@ -84,6 +94,7 @@ target_link_libraries(hdf5_dataset
 add_library(reachability_map_plugin SHARED
         src/reachability_map_visual.cpp
         src/reachability_map_display.cpp
+        src/gpu_reachability_renderer.cpp
 )
 ament_target_dependencies(reachability_map_plugin
         rclcpp
@@ -99,7 +110,14 @@ target_link_libraries(reachability_map_plugin
         ${MPI_CXX_LIBRARIES}
         rviz_ogre_vendor::OgreMain
         "${cpp_typesupport_target}"
+        ${OPENGL_LIBRARIES}
 )
+
+# Link GLEW if available (for GPU rendering)
+if(GLEW_FOUND)
+    target_link_libraries(reachability_map_plugin ${GLEW_LIBRARIES})
+    target_include_directories(reachability_map_plugin PRIVATE ${GLEW_INCLUDE_DIRS})
+endif()
 
 # ------------------------------------------------------------------------------
 # Executable
