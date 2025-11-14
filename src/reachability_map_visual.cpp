@@ -17,7 +17,6 @@
 
 #include "reachability_map_visual.h"
 #include <iterator>
-#include <atomic>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -150,8 +149,8 @@ void ReachMapVisual::buildSparseGridOptimized(
   const bool check_dissection = (disect_choice != Disect::None);
 
   // Approche 2-pass pour allocation exacte:
-  // Pass 1: Compter les voxels visibles (parallèle)
-  std::atomic<size_t> visible_count{0};
+  // Pass 1: Compter les voxels visibles (parallèle avec réduction OpenMP)
+  size_t visible_count = 0;
 
   #ifdef _OPENMP
   #pragma omp parallel for collapse(3) schedule(guided, 256) reduction(+:visible_count)
@@ -184,7 +183,7 @@ void ReachMapVisual::buildSparseGridOptimized(
 
   // Pass 2: Allouer et remplir (parallèle avec buffers thread-local)
   point_buffer_.clear();
-  point_buffer_.reserve(visible_count.load());
+  point_buffer_.reserve(visible_count);
 
   // Utiliser un vecteur de vecteurs temporaires (un par thread)
   #ifdef _OPENMP
@@ -206,7 +205,7 @@ void ReachMapVisual::buildSparseGridOptimized(
     #endif
 
     auto& local_buffer = thread_buffers[thread_id];
-    local_buffer.reserve(visible_count.load() / num_threads + 100);
+    local_buffer.reserve(visible_count / num_threads + 100);
 
     #ifdef _OPENMP
     #pragma omp for collapse(3) schedule(guided, 256)
