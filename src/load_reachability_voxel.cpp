@@ -66,19 +66,28 @@ int main(int argc, char **argv)
     double resolution_ = h5.get_resolution();
     double origine_offset = h5.get_origine_offset();
 
-    // OPTIMIZED: Direct HDF5 reading for collision voxels (legacy)
+    // OPTIMIZED: Direct HDF5 reading for collision voxels with OpenMP parallelization
     std::vector<std::array<double, 3>> voxels;
     h5.h5ToCollision(voxels, resolution_, origine_offset);
-  
-    std::string frame_id; 
+
+    std::string frame_id;
     node->declare_parameter("frame_id", "base_link");
     node->get_parameter("frame_id", frame_id);
 
-    // Create voxel grid msg
+    // Create voxel grid msg with pre-allocation (évite réallocations)
     marker.header.stamp = node->get_clock()->now();
     marker.header.frame_id = frame_id;
     marker.id = index_map;
     marker.type = 6; // Cube list
+    marker.action = 0; // Add/modify
+
+    // Pré-allouer les vecteurs pour éviter les réallocations
+    marker.points.clear();
+    marker.colors.clear();
+    marker.points.reserve(voxels.size());
+    marker.colors.reserve(voxels.size());
+
+    // Remplir les points et couleurs (optimisé avec accès direct)
     for (const auto& voxel : voxels)
     {
       geometry_msgs::msg::Point point;
@@ -89,12 +98,17 @@ int main(int argc, char **argv)
 
       std_msgs::msg::ColorRGBA color;
       color.r = 1.0;
+      color.g = 0.0;
+      color.b = 0.0;
       color.a = 0.50;
       marker.colors.push_back(color);
     }
+
     marker.scale.x = resolution_;
     marker.scale.y = resolution_;
     marker.scale.z = resolution_;
+
+    RCLCPP_INFO(node->get_logger(), "Collision marker created with %zu voxels", voxels.size());
 
 
 

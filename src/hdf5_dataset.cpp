@@ -281,10 +281,10 @@ bool Hdf5Dataset::h5ToSpheres(MapVecDouble& sphere_col, double resolution, doubl
 
 
 bool Hdf5Dataset::h5ToCollision(std::vector<std::array<double, 3>> & obstacles, double resolution, double origine_offset){
-  RCLCPP_INFO(rclcpp::get_logger("load_reachability_map"), "Generating map...");
+  RCLCPP_INFO(rclcpp::get_logger("Hdf5Dataset"), "Loading collision voxels (optimized)...");
 
   if (this->reachability_map < 0) {
-    RCLCPP_ERROR(rclcpp::get_logger("load_reachability_map"), "Invalid dataset handle.");
+    RCLCPP_ERROR(rclcpp::get_logger("Hdf5Dataset"), "Invalid dataset handle.");
     return false;
   }
 
@@ -293,7 +293,7 @@ bool Hdf5Dataset::h5ToCollision(std::vector<std::array<double, 3>> & obstacles, 
 
   int ndims = H5Sget_simple_extent_ndims(dataspace);
   if (ndims != 3 && ndims != 4) {
-    RCLCPP_ERROR(rclcpp::get_logger("load_reachability_map"), "Expected a 3D or 4D dataset, got %dD.", ndims);
+    RCLCPP_ERROR(rclcpp::get_logger("Hdf5Dataset"), "Expected a 3D or 4D dataset, got %dD.", ndims);
     H5Sclose(dataspace);
     return false;
   }
@@ -322,27 +322,88 @@ bool Hdf5Dataset::h5ToCollision(std::vector<std::array<double, 3>> & obstacles, 
   H5Sclose(memspace);
 
   if (status < 0) {
-    RCLCPP_ERROR(rclcpp::get_logger("load_reachability_map"), "Failed to read HDF5 dataset.");
+    RCLCPP_ERROR(rclcpp::get_logger("Hdf5Dataset"), "Failed to read HDF5 dataset.");
     return false;
   }
 
+  // OPTIMISATION: 2-pass parallèle pour extraction sparse voxels
+
+  // Pass 1: Compter les voxels d'obstacle (parallèle avec réduction OpenMP)
+  size_t collision_count = 0;
+
+#ifdef _OPENMP
+  #pragma omp parallel for collapse(3) schedule(guided, 256) reduction(+:collision_count)
+#endif
   for (size_t i = 0; i < d1; ++i) {
     for (size_t j = 0; j < d2; ++j) {
       for (size_t k = 0; k < d3; ++k) {
         size_t index = i * d2 * d3 + j * d3 + k;
-        float ri = data[index];
-        if (ri != 0.0f) {
-          // add it in the vector
-          double x = i * this->res_ + origine_offset;
-          double y = j * this->res_ + origine_offset;
-          double z = k * this->res_ + origine_offset;
-          obstacles.push_back({x, y, z});
+        if (data[index] != 0.0f) {
+          ++collision_count;
         }
       }
     }
   }
 
-  RCLCPP_INFO(rclcpp::get_logger("load_reachability_map"), "Map generation complete.");
+  // Pré-allouer le vecteur de sortie (évite réallocations)
+  obstacles.clear();
+  obstacles.reserve(collision_count);
+
+  // Pass 2: Extraction parallèle avec buffers thread-local
+#ifdef _OPENMP
+  int num_threads = omp_get_max_threads();
+#else
+  int num_threads = 1;
+#endif
+
+  std::vector<std::vector<std::array<double, 3>>> thread_buffers(num_threads);
+
+  // Pré-allouer les buffers thread-local
+  for (auto& buf : thread_buffers) {
+    buf.reserve(collision_count / num_threads + 256);
+  }
+
+#ifdef _OPENMP
+  #pragma omp parallel
+  {
+    int thread_id = omp_get_thread_num();
+    auto& local_buffer = thread_buffers[thread_id];
+
+    #pragma omp for collapse(3) schedule(guided, 256) nowait
+#endif
+    for (size_t i = 0; i < d1; ++i) {
+      for (size_t j = 0; j < d2; ++j) {
+        for (size_t k = 0; k < d3; ++k) {
+          size_t index = i * d2 * d3 + j * d3 + k;
+          if (data[index] != 0.0f) {
+            double x = i * this->res_ + origine_offset;
+            double y = j * this->res_ + origine_offset;
+            double z = k * this->res_ + origine_offset;
+#ifdef _OPENMP
+            local_buffer.push_back({x, y, z});
+#else
+            obstacles.push_back({x, y, z});
+#endif
+          }
+        }
+      }
+    }
+#ifdef _OPENMP
+  }
+#endif
+
+  // Merge thread buffers (séquentiel, mais rapide)
+#ifdef _OPENMP
+  for (auto& buf : thread_buffers) {
+    obstacles.insert(obstacles.end(), buf.begin(), buf.end());
+  }
+#endif
+
+  RCLCPP_INFO(rclcpp::get_logger("Hdf5Dataset"),
+              "Collision voxels loaded: %zu occupied voxels (%.1f%% of %zu total)",
+              obstacles.size(),
+              100.0 * obstacles.size() / total_size,
+              total_size);
   return true;
 }
 
