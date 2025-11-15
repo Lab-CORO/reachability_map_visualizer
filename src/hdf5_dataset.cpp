@@ -2,6 +2,10 @@
 #include <reachability_map_visualizer/hdf5_dataset.h>
 #include <rclcpp/rclcpp.hpp>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #define RANK_OUT 2
 
 namespace hdf5_dataset
