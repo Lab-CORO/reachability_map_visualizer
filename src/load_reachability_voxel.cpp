@@ -13,26 +13,22 @@
 #include <visualization_msgs/msg/marker.hpp>
 #include <std_msgs/msg/color_rgba.hpp>
 #include <std_msgs/msg/int16.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/point_cloud2_iterator.hpp>
 using namespace std::chrono_literals;
 using namespace hdf5_dataset;
 
 static int index_map = 0;
 static int previous_index_map = -1;
-static rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr  publisher_voxel;
-static visualization_msgs::msg::Marker marker;
+static rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher_voxel;
+static sensor_msgs::msg::PointCloud2 collision_cloud;
   // Create message RM
 auto ws_msg = std::make_shared<reachability_map_visualizer::msg::WorkSpace>();
 
 
 
 void next_callback(const std_msgs::msg::Int16::SharedPtr msg){
-    // delete previous markers
-  visualization_msgs::msg::Marker del_marker;
-  // del_marker.header.stamp = node->get_clock()->now();
-  del_marker.header.frame_id = "base_footprint";
-  // marker.id = index;
-  del_marker.action = 3;
-  publisher_voxel->publish(del_marker);
+    // Change map index - next publish will load new map
   index_map = msg->data;
 }
 
@@ -45,7 +41,7 @@ int main(int argc, char **argv)
   auto node = rclcpp::Node::make_shared("workspace");
 
   auto publisher = node->create_publisher<reachability_map_visualizer::msg::WorkSpace>("reachability_map", 1);
-  publisher_voxel = node->create_publisher<visualization_msgs::msg::Marker>("voxel_grid", 1);
+  publisher_voxel = node->create_publisher<sensor_msgs::msg::PointCloud2>("collision_voxels", 1);
   auto subscription = node->create_subscription<std_msgs::msg::Int16>(
             "/index", 10, next_callback );
 
@@ -74,41 +70,44 @@ int main(int argc, char **argv)
     node->declare_parameter("frame_id", "base_link");
     node->get_parameter("frame_id", frame_id);
 
-    // Create voxel grid msg with pre-allocation (évite réallocations)
-    marker.header.stamp = node->get_clock()->now();
-    marker.header.frame_id = frame_id;
-    marker.id = index_map;
-    marker.type = 6; // Cube list
-    marker.action = 0; // Add/modify
+    // OPTIMIZED: PointCloud2 for efficient rendering (instead of CUBE_LIST marker)
+    // RViz can render millions of points efficiently vs thousands of cubes
+    collision_cloud.header.stamp = node->get_clock()->now();
+    collision_cloud.header.frame_id = frame_id;
+    collision_cloud.height = 1;
+    collision_cloud.width = voxels.size();
+    collision_cloud.is_dense = true;
+    collision_cloud.is_bigendian = false;
 
-    // Pré-allouer les vecteurs pour éviter les réallocations
-    marker.points.clear();
-    marker.colors.clear();
-    marker.points.reserve(voxels.size());
-    marker.colors.reserve(voxels.size());
+    // Define PointCloud2 fields: x, y, z, rgb
+    sensor_msgs::PointCloud2Modifier modifier(collision_cloud);
+    modifier.setPointCloud2FieldsByString(2, "xyz", "rgb");
+    modifier.resize(voxels.size());
 
-    // Remplir les points et couleurs (optimisé avec accès direct)
-    for (const auto& voxel : voxels)
-    {
-      geometry_msgs::msg::Point point;
-      point.x = voxel[0];
-      point.y = voxel[1];
-      point.z = voxel[2];
-      marker.points.push_back(point);
+    // Iterators for fast access
+    sensor_msgs::PointCloud2Iterator<float> iter_x(collision_cloud, "x");
+    sensor_msgs::PointCloud2Iterator<float> iter_y(collision_cloud, "y");
+    sensor_msgs::PointCloud2Iterator<float> iter_z(collision_cloud, "z");
+    sensor_msgs::PointCloud2Iterator<uint8_t> iter_rgb(collision_cloud, "rgb");
 
-      std_msgs::msg::ColorRGBA color;
-      color.r = 1.0;
-      color.g = 0.0;
-      color.b = 0.0;
-      color.a = 0.50;
-      marker.colors.push_back(color);
+    // Fill PointCloud2 with collision voxels (red color)
+    for (const auto& voxel : voxels) {
+      *iter_x = static_cast<float>(voxel[0]);
+      *iter_y = static_cast<float>(voxel[1]);
+      *iter_z = static_cast<float>(voxel[2]);
+
+      // RGB color: red (255, 0, 0)
+      iter_rgb[0] = 255;  // R
+      iter_rgb[1] = 0;    // G
+      iter_rgb[2] = 0;    // B
+
+      ++iter_x;
+      ++iter_y;
+      ++iter_z;
+      ++iter_rgb;
     }
 
-    marker.scale.x = resolution_;
-    marker.scale.y = resolution_;
-    marker.scale.z = resolution_;
-
-    RCLCPP_INFO(node->get_logger(), "Collision marker created with %zu voxels", voxels.size());
+    RCLCPP_INFO(node->get_logger(), "Collision PointCloud2 created with %zu voxels", voxels.size());
 
 
 
@@ -160,7 +159,7 @@ int main(int argc, char **argv)
     previous_index_map = index_map;
   }
   // send msg
-  publisher_voxel->publish(marker);
+  publisher_voxel->publish(collision_cloud);
   publisher->publish(*ws_msg);
   
 
