@@ -66,6 +66,12 @@ Hdf5Dataset::Hdf5Dataset(std::string path, std::string filename)
   checkFileName(this->filename_);
 }
 
+Hdf5Dataset::~Hdf5Dataset()
+{
+  // Ensure all HDF5 resources are properly closed
+  close();
+}
+
 bool Hdf5Dataset::open() //TODO add hdf5 path to dataset 
 {
   std::string fullpath = this->path_;
@@ -173,9 +179,27 @@ bool Hdf5Dataset::open() //TODO add hdf5 path to dataset
 
 void Hdf5Dataset::close()
 {
-  H5Dclose(this->reachability_map);
-  H5Dclose(this->voxel_grid);
-  H5Fclose(this->file_);
+  // Close datasets if they are open
+  if (this->reachability_map >= 0) {
+    H5Dclose(this->reachability_map);
+    this->reachability_map = -1;
+  }
+  if (this->voxel_grid >= 0) {
+    H5Dclose(this->voxel_grid);
+    this->voxel_grid = -1;
+  }
+
+  // Close group if it is open
+  if (this->group_reachability_map_ >= 0) {
+    H5Gclose(this->group_reachability_map_);
+    this->group_reachability_map_ = -1;
+  }
+
+  // Close file if it is open
+  if (this->file_ >= 0) {
+    H5Fclose(this->file_);
+    this->file_ = -1;
+  }
 }
 
 bool Hdf5Dataset::checkPath(std::string path)

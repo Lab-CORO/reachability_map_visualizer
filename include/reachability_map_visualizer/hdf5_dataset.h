@@ -31,6 +31,7 @@ public:
   Hdf5Dataset(std::string path, std::string filename);
   Hdf5Dataset(std::string fullpath);
   Hdf5Dataset(std::string fullpath, int index);
+  ~Hdf5Dataset();  // Destructor to ensure HDF5 resources are freed
 
   bool open();
   void close();

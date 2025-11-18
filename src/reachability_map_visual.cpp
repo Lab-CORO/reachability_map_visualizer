@@ -70,6 +70,13 @@ namespace reachability_map_visualizer
 
 ReachMapVisual::~ReachMapVisual()
 {
+  // Delete the point cloud visual to prevent memory leak
+  if (point_cloud_visual_) {
+    delete point_cloud_visual_;
+    point_cloud_visual_ = nullptr;
+  }
+
+  // Destroy the scene node
   scene_manager_->destroySceneNode(frame_node_);
 }
 

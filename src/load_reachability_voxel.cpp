@@ -21,10 +21,6 @@ using namespace hdf5_dataset;
 static int index_map = 0;
 static int previous_index_map = -1;
 static rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher_voxel;
-static sensor_msgs::msg::PointCloud2 collision_cloud;
-  // Create message RM
-auto ws_msg = std::make_shared<reachability_map_visualizer::msg::WorkSpace>();
-
 
 
 void next_callback(const std_msgs::msg::Int16::SharedPtr msg){
@@ -72,6 +68,8 @@ int main(int argc, char **argv)
 
     // OPTIMIZED: PointCloud2 for efficient rendering (instead of CUBE_LIST marker)
     // RViz can render millions of points efficiently vs thousands of cubes
+    // Create locally to avoid memory accumulation
+    sensor_msgs::msg::PointCloud2 collision_cloud;
     collision_cloud.header.stamp = node->get_clock()->now();
     collision_cloud.header.frame_id = frame_id;
     collision_cloud.height = 1;
@@ -109,9 +107,8 @@ int main(int argc, char **argv)
 
     RCLCPP_INFO(node->get_logger(), "Collision PointCloud2 created with %zu voxels", voxels.size());
 
-
-
-
+    // Create workspace message (recreate each time to avoid memory accumulation)
+    auto ws_msg = std::make_shared<reachability_map_visualizer::msg::WorkSpace>();
     ws_msg->header.stamp = node->get_clock()->now();
     ws_msg->header.frame_id = frame_id;
     ws_msg->resolution = resolution_;
@@ -143,6 +140,9 @@ int main(int argc, char **argv)
     RCLCPP_INFO(node->get_logger(), "Loaded RI array: %dx%dx%d = %zu voxels",
                 size_x, size_y, size_z, ws_msg->ri_values.size());
 
+    // Close HDF5 file to prevent resource leak
+    h5.close();
+
     // Legacy: garder ws_spheres pour compatibilité (optionnel, peut être retiré)
     // Commenté pour économiser bande passante - décommenter si besoin
     /*
@@ -156,15 +156,15 @@ int main(int argc, char **argv)
     }
     */
 
+    // Send messages
+    publisher_voxel->publish(collision_cloud);
+    publisher->publish(*ws_msg);
+
     previous_index_map = index_map;
   }
-  // send msg
-  publisher_voxel->publish(collision_cloud);
-  publisher->publish(*ws_msg);
-  
 
-    rclcpp::spin_some(node);
-    loop_rate.sleep();
+  rclcpp::spin_some(node);
+  loop_rate.sleep();
   }
 
   rclcpp::shutdown();
