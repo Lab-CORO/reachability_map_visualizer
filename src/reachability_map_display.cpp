@@ -21,6 +21,10 @@ namespace reachability_map_visualizer
 {
 ReachMapDisplay::ReachMapDisplay()
 {
+  index_property_ = new rviz_common::properties::IntProperty("Map Index", 0,
+                        "Index of the map to load from the HDF5 file", this, SLOT(updateIndex()), this);
+  index_property_->setMin(0);
+
   do_display_arrow_ = new rviz_common::properties::BoolProperty("Show Poses", false, "Displays the arrow.", this);
   do_display_sphere_ = new rviz_common::properties::BoolProperty("Show Shape", true, "Displays the spheres.", this);
   is_byReachability_ = new rviz_common::properties::BoolProperty("Color by Reachability", true, "Color transform by Reachability Index", this);
@@ -89,6 +93,8 @@ ReachMapDisplay::ReachMapDisplay()
 void ReachMapDisplay::onInitialize()
 {
   MFDClass::onInitialize();
+  auto node = context_->getRosNodeAbstraction().lock()->get_raw_node();
+  index_publisher_ = node->create_publisher<std_msgs::msg::Int16>("/index", 1);
 }
 
 ReachMapDisplay::~ReachMapDisplay()
@@ -138,6 +144,13 @@ void ReachMapDisplay::updateSphereSize()
   {
     visuals_[i]->setSizeSphere(length);
   }
+}
+
+void ReachMapDisplay::updateIndex()
+{
+  std_msgs::msg::Int16 msg;
+  msg.data = static_cast<int16_t>(index_property_->getInt());
+  index_publisher_->publish(msg);
 }
 
 void ReachMapDisplay::processMessage(reachability_map_visualizer::msg::WorkSpace::ConstSharedPtr msg)

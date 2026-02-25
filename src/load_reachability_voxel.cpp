@@ -34,9 +34,12 @@ class WsVizualisation : public rclcpp::Node
     {
 
 
+      this->declare_parameter("h5_path", "/");
+      this->declare_parameter("frame_id", "base_link");
+
       publisher = this->create_publisher<reachability_map_visualizer::msg::WorkSpace>("reachability_map", 1);
       publisher_voxel = this->create_publisher<visualization_msgs::msg::Marker>("voxel_grid", 1);
-      auto subscription = this->create_subscription<std_msgs::msg::Int16>(
+      subscription_ = this->create_subscription<std_msgs::msg::Int16>(
                 "/index", 10, std::bind(&WsVizualisation::next_callback, this, _1) );
       timer_ = this->create_wall_timer(
       30ms, std::bind(&WsVizualisation::timer_callback, this));
@@ -50,8 +53,7 @@ class WsVizualisation : public rclcpp::Node
       if (index_map != previous_index_map){
 
         // extract data to pose and ri
-        std::string h5_path; 
-        this->declare_parameter("h5_path", "/");
+        std::string h5_path;
         this->get_parameter("h5_path", h5_path);
         hdf5_dataset::Hdf5Dataset h5(h5_path, index_map);
 
@@ -63,8 +65,7 @@ class WsVizualisation : public rclcpp::Node
         h5.h5ToSpheres(sphere_col, resolution_, origine_offset);
         h5.h5ToCollision(voxels, resolution_, origine_offset);
       
-        std::string frame_id; 
-        this->declare_parameter("frame_id", "base_link");
+        std::string frame_id;
         this->get_parameter("frame_id", frame_id);
 
         // Create voxel grid msg
@@ -132,6 +133,7 @@ class WsVizualisation : public rclcpp::Node
   int previous_index_map = -1;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr  publisher_voxel;
   rclcpp::Publisher<reachability_map_visualizer::msg::WorkSpace>::SharedPtr publisher;
+  rclcpp::Subscription<std_msgs::msg::Int16>::SharedPtr subscription_;
   visualization_msgs::msg::Marker marker;
     // Create message RM
   reachability_map_visualizer::msg::WorkSpace ws_msg; 
