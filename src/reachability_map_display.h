@@ -6,6 +6,8 @@
 #include <rviz_common/message_filter_display.hpp>
 #include <rviz_common/properties/ros_topic_property.hpp>
 #include "reachability_map_visualizer/msg/work_space.hpp"
+#include <std_msgs/msg/int16.hpp>
+#include <rclcpp/rclcpp.hpp>
 #endif
 
 // namespace Ogre
@@ -53,6 +55,8 @@ private Q_SLOTS:
   void updateColorAndAlphaSphere();
   void updateSphereSize();
 
+  void updateIndex();
+
 private:
   void processMessage(reachability_map_visualizer::msg::WorkSpace::ConstSharedPtr msg)override;
   // std::vector< boost::shared_ptr< ReachMapVisual > > visuals_;
@@ -77,8 +81,11 @@ private:
   rviz_common::properties::IntProperty* lower_bound_reachability_;
   rviz_common::properties::IntProperty* upper_bound_reachability_;
   rviz_common::properties::BoolProperty* is_byReachability_;
+  rviz_common::properties::BoolProperty* use_intensity_coloring_;
   rviz_common::properties::EnumProperty* shape_property_;
   rviz_common::properties::EnumProperty* disect_property_;
+  rviz_common::properties::IntProperty* index_property_;
+  rclcpp::Publisher<std_msgs::msg::Int16>::SharedPtr index_publisher_;
 };
 
 }  // end namespace reachability_map_visualizer

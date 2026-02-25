@@ -21,6 +21,10 @@ namespace reachability_map_visualizer
 {
 ReachMapDisplay::ReachMapDisplay()
 {
+  index_property_ = new rviz_common::properties::IntProperty("Map Index", 0,
+                        "Index of the map to load from the HDF5 file", this, SLOT(updateIndex()), this);
+  index_property_->setMin(0);
+
   do_display_arrow_ = new rviz_common::properties::BoolProperty("Show Poses", false, "Displays the arrow.", this);
   do_display_sphere_ = new rviz_common::properties::BoolProperty("Show Shape", true, "Displays the spheres.", this);
   is_byReachability_ = new rviz_common::properties::BoolProperty("Color by Reachability", true, "Color transform by Reachability Index", this);
@@ -81,11 +85,16 @@ ReachMapDisplay::ReachMapDisplay()
 
   upper_bound_reachability_ =
       new rviz_common::properties::IntProperty("Highest Reachability Index", 100, "Highest Reachability index.", this);
+
+  use_intensity_coloring_ = new rviz_common::properties::BoolProperty("Use Jet Colormap", true,
+      "Use jet colormap gradient (blue->cyan->green->yellow->red) instead of categorical RGB colors", this);
 }
 
 void ReachMapDisplay::onInitialize()
 {
   MFDClass::onInitialize();
+  auto node = context_->getRosNodeAbstraction().lock()->get_raw_node();
+  index_publisher_ = node->create_publisher<std_msgs::msg::Int16>("/index", 1);
 }
 
 ReachMapDisplay::~ReachMapDisplay()
@@ -137,6 +146,13 @@ void ReachMapDisplay::updateSphereSize()
   }
 }
 
+void ReachMapDisplay::updateIndex()
+{
+  std_msgs::msg::Int16 msg;
+  msg.data = static_cast<int16_t>(index_property_->getInt());
+  index_publisher_->publish(msg);
+}
+
 void ReachMapDisplay::processMessage(reachability_map_visualizer::msg::WorkSpace::ConstSharedPtr msg)
 {
   Ogre::Quaternion orientation;
@@ -153,7 +169,8 @@ void ReachMapDisplay::processMessage(reachability_map_visualizer::msg::WorkSpace
 
   visual->setMessage(msg, do_display_arrow_->getBool(), do_display_sphere_->getBool(),
                      lower_bound_reachability_->getInt(), upper_bound_reachability_->getInt(),
-                     hight_max_->getInt(), hight_min_->getInt(), disect_property_->getOptionInt());
+                     hight_max_->getInt(), hight_min_->getInt(), disect_property_->getOptionInt(),
+                     use_intensity_coloring_->getBool());
 
   visual->setFramePosition(position);
   visual->setFrameOrientation(orientation);
